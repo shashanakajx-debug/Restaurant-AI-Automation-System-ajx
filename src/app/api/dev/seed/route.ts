@@ -1,4 +1,30 @@
 import { NextResponse } from 'next/server';
+import seed from '@/../../scripts/seed';
+
+// POST /api/dev/seed - Run DB seed (development only)
+export async function POST(request: Request) {
+  try {
+    const env = process.env.NODE_ENV || 'development';
+    const devKey = process.env.DEV_SEED_KEY || '';
+
+    if (env !== 'development' && env !== 'test') {
+      return NextResponse.json({ success: false, error: 'Seeding is disabled in production' }, { status: 403 });
+    }
+
+    const providedKey = request.headers.get('x-dev-seed-key') || '';
+    if (devKey && providedKey !== devKey) {
+      return NextResponse.json({ success: false, error: 'Invalid seed key' }, { status: 401 });
+    }
+
+    await seed();
+
+    return NextResponse.json({ success: true, message: 'Database seeded successfully' });
+  } catch (error: any) {
+    console.error('[Dev Seed API] Error:', error);
+    return NextResponse.json({ success: false, error: error?.message || 'Seed failed' }, { status: 500 });
+  }
+}
+// NextResponse already imported above
 import dbConnect from '@/lib/mongoose';
 import User from '@/models/User';
 import MenuItem from '@/models/MenuItem';

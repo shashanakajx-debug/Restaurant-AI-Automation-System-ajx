@@ -1,87 +1,169 @@
 import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import GoogleProvider from "next-auth/providers/google";
 import dbConnect from "@/lib/mongoose";
 import User from "@/models/User";
+import { UserRole } from "@/types/user";
 
 const options: NextAuthOptions = {
   providers: [
     CredentialsProvider({
-      name: "Credentials",
+      name: "credentials",
       credentials: {
-        email: { label: "Email", type: "text" },
-        password: { label: "Password", type: "password" }
+        email: { 
+          label: "Email", 
+          type: "email",
+          placeholder: "your@email.com"
+        },
+        password: { 
+          label: "Password", 
+          type: "password",
+          placeholder: "Your password"
+        }
       },
-
-      // authorize is called when a user submits the credentials form
       async authorize(credentials) {
         try {
-          console.log("[Auth] authorize called");
-
           if (!credentials?.email || !credentials?.password) {
-            console.warn("[Auth] missing email or password");
-            return null;
+            throw new Error("Email and password are required");
           }
 
-          // normalize and connect
-          const email = credentials.email.trim().toLowerCase();
+          // Connect to database
           await dbConnect();
 
-          const user = await User.findOne({ email }).exec();
+          // Find user by email
+          const email = credentials.email.trim().toLowerCase();
+          const user = await User.findOne({ email, isActive: true }).exec();
+          
           if (!user) {
-            console.warn("[Auth] user not found:", email);
-            return null;
+            throw new Error("Invalid email or password");
           }
 
-          // Prefer model's comparePassword. If it's missing, fall back (dev only).
-          let passwordMatches = false;
-          if (typeof (user as any).comparePassword === "function") {
-            passwordMatches = await (user as any).comparePassword(credentials.password);
-          } else {
-            // fallback — not secure for production, only for quick dev setups
-            console.warn("[Auth] comparePassword missing — using plain check (dev only)");
-            passwordMatches = credentials.password === (user as any).password;
-          }
-
+          // Verify password
+          const passwordMatches = await user.comparePassword(credentials.password);
           if (!passwordMatches) {
-            console.warn("[Auth] invalid password for", email);
-            return null;
+            throw new Error("Invalid email or password");
           }
 
-          // Return the minimal user object for the session
+          // Update last login
+          user.lastLogin = new Date();
+          await user.save();
+
+          // Return user object for session
           return {
-            id: user.id.toString(),
+            id: String((user as any)._id),
             email: user.email,
             name: user.name || "",
-            role: (user as any).role || "customer"
-          };
-        } catch (err) {
-          console.error("[Auth] authorize error:", err);
+            role: user.role as UserRole,
+            image: null
+          } as any;
+        } catch (error) {
+          console.error("[Auth] Authorization error:", error);
           return null;
         }
       }
+    }),
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID || "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
     })
   ],
 
-  session: { strategy: "jwt" },
+  session: { 
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+  },
 
   callbacks: {
-    async jwt({ token, user }) {
-      if (user) (token as any).role = (user as any).role || (token as any).role;
+    async signIn({ user, account, profile }) {
+      try {
+        await dbConnect();
+        
+        if (account?.provider === "google") {
+          // Handle Google OAuth
+          const existingUser = await User.findOne({ email: user.email }).exec();
+          
+          if (!existingUser) {
+            // Create new user from Google account
+            const newUser = new User({
+              email: user.email,
+              name: user.name,
+              role: "customer",
+              emailVerified: true,
+              isActive: true,
+              lastLogin: new Date()
+            });
+            await newUser.save();
+          } else {
+            // Update existing user
+            existingUser.lastLogin = new Date();
+            if (!existingUser.emailVerified) {
+              existingUser.emailVerified = true;
+            }
+            await existingUser.save();
+          }
+        }
+        
+        return true;
+      } catch (error) {
+        console.error("[Auth] SignIn error:", error);
+        return false;
+      }
+    },
+
+    async jwt({ token, user, account }) {
+      // Persist the OAuth access_token and or the user id to the token right after signin
+      if (user) {
+        (token as any).role = (user as any).role;
+        (token as any).id = (user as any).id;
+      }
+      
+      if (account) {
+        token.accessToken = account.access_token;
+      }
+      
       return token;
     },
 
     async session({ session, token }) {
-      if (session?.user) (session as any).user.role = (token as any).role;
+      // Send properties to the client
+      if (session.user) {
+        (session.user as any).id = (token as any).id as string;
+        (session.user as any).role = (token as any).role as UserRole;
+      }
+      
       return session;
     }
   },
 
   pages: {
-    signIn: "/api/auth/signin" // default can be used or point to your custom page
+    signIn: "/auth/signin",
+    error: "/auth/error",
   },
 
-  debug: process.env.NEXTAUTH_DEBUG === "true",
-  secret: process.env.NEXTAUTH_SECRET || "dev-secret"
+  events: {
+    async signIn({ user, account, profile, isNewUser }) {
+      console.log(`[Auth] User signed in: ${user.email}`);
+    },
+    async signOut({ session, token }) {
+      console.log(`[Auth] User signed out: ${session?.user?.email}`);
+    },
+  },
+
+  debug: process.env.NODE_ENV === "development",
+  secret: process.env.NEXTAUTH_SECRET,
+  
+  // Security options
+  cookies: {
+    sessionToken: {
+      name: `next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production'
+      }
+    }
+  }
 };
 
 const handler = NextAuth(options);
