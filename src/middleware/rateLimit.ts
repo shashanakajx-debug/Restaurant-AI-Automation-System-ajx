@@ -21,14 +21,33 @@ export function rateLimit(config: RateLimitConfig) {
   const {
     windowMs,
     maxRequests,
-    keyGenerator = (req) => req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown',
+    keyGenerator = (req) => {
+      try {
+        // Guard against req or headers being undefined (some middleware wrappers may call without a NextRequest)
+        const headers = (req as any)?.headers;
+        if (!headers) return 'unknown';
+        return headers.get('x-forwarded-for') || headers.get('x-real-ip') || 'unknown';
+      } catch (e) {
+        return 'unknown';
+      }
+    },
     skipSuccessfulRequests = false,
     skipFailedRequests = false,
   } = config;
 
   return (handler: (req: NextRequest) => Promise<NextResponse>) => {
     return async (request: NextRequest): Promise<NextResponse> => {
-      const key = keyGenerator(request);
+      // Safely derive a key for rate limiting. Some middleware wrappers may call
+      // the composed function without a proper NextRequest, so guard access.
+      let key = 'unknown';
+      try {
+        if (request && (request as any).headers) {
+          key = keyGenerator(request as NextRequest) || 'unknown';
+        }
+      } catch (e) {
+        // If keyGenerator throws, fall back to 'unknown'
+        key = 'unknown';
+      }
       const now = Date.now();
       const windowStart = now - windowMs;
 

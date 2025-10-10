@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
 import { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import Link from 'next/link';
 import { z } from 'zod';
@@ -9,8 +9,18 @@ import { loginSchema } from '@/schemas/auth';
 
 export default function SignInPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get('callbackUrl') || '/';
+  // Avoid using `useSearchParams` here (it can cause prerender/suspense issues
+  // during build). Read the callback param on submit from window.location so the
+  // page stays a simple client component.
+  const getCallbackUrl = () => {
+    try {
+      if (typeof window === 'undefined') return '/';
+      const params = new URLSearchParams(window.location.search);
+      return params.get('callbackUrl') || '/';
+    } catch (e) {
+      return '/';
+    }
+  };
   
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +87,7 @@ export default function SignInPage() {
         throw new Error(result.error);
       }
       
-      router.push(callbackUrl);
+  router.push(getCallbackUrl());
       router.refresh();
     } catch (err) {
       console.error('Login error:', err);

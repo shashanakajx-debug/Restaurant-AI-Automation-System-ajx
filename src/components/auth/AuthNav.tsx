@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import SignOutButton from "./SignOutButton";
+import SignOutButton from "./signoutbutton";
 
 export default function AuthNav() {
   const { data: session, status } = useSession();
