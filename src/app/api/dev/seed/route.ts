@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import seed from '@/../../scripts/seed';
+// The scripts folder is at the project root. Use a relative path from this file to that script.
+import seed from '../../../../../scripts/seed';
 
 // POST /api/dev/seed - Run DB seed (development only)
 export async function POST(request: Request) {
