@@ -1,124 +1,217 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import dbConnect from '@/lib/mongoose';
 import AISession from '@/models/AISession';
 import MenuItem from '@/models/MenuItem';
 import { chatRequestSchema } from '@/schemas/ai';
 import { withCorsAuthAndValidation, rateLimits } from '@/middleware';
 import { createApiResponse, createApiError } from '@/lib/utils/api';
-import AI from '@/lib/ai';
+import * as AI from '@/lib/ai';
 
-// POST /api/ai/chat - Chat with AI assistant
+type ValidatedData = {
+  message: string;
+  sessionId?: string;
+  context?: Record<string, any>;
+};
+
+const MAX_MESSAGE_LENGTH = 4000;
+const MAX_STORED_MESSAGES = 50;
+const RECENT_CONTEXT_MESSAGES = 10;
+
+// Helper function to ensure messages is an array
+function ensureMessagesArray(doc: any) {
+  if (!doc) return;
+  if (!Array.isArray(doc.messages)) {
+    if (doc.messages && typeof doc.messages === 'object') {
+      // try convert map/object -> array
+      try {
+        doc.messages = Object.values(doc.messages);
+      } catch {
+        doc.messages = [];
+      }
+    } else {
+      doc.messages = [];
+    }
+    if (typeof doc.markModified === 'function') doc.markModified('messages');
+  }
+}
+
+// Helper function to normalize AI response
+function normalizeAiResponse(response: string | null): string {
+  if (!response) return '';
+  return response.trim();
+}
+
+// Helper function to escape regex special characters
+function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export const POST = withCorsAuthAndValidation(
   chatRequestSchema,
-  { origin: true, methods: ['POST'], credentials: true }
+  { origin: true, methods: ['POST'], credentials: false }
 )(
-  rateLimits.ai(
-    async (request: any) => {
-      try {
-        await dbConnect();
-        // Ensure validated data exists (validation middleware should populate it)
-        const { message, sessionId, context } = request.validatedData || {};
-        const userId = request.user?.id;
-
-        if (!message) {
-          return NextResponse.json(createApiError('Message is required'), { status: 400 });
-        }
-        
-        // Get or create AI session
-        let session;
-        if (sessionId) {
-          session = await AISession.findOne({ sessionId, isActive: true });
-        }
-        
-        if (!session) {
-          session = new AISession({
-            userId,
-            context: context || { restaurantId: 'default' },
-            messages: [],
-            isActive: true,
-          });
-          await session.save();
-        }
-        
-        // Get menu items for context
-        const menuItems = await MenuItem.find({ active: true })
-          .select('name description price category tags')
-          .lean();
-        
-        // Build system prompt using shared helper
-        const systemPrompt = AI.buildSystemPrompt(menuItems, session.context);
-
-        // Add user message to session
-        session.messages.push({
-          id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          role: 'user',
-          content: message,
-          timestamp: new Date(),
-        });
-        
-        // Get recent messages for context (last 10)
-        const recentMessages = session.messages.slice(-10);
-        
-        // Prepare messages for OpenAI
-        const messages = [
-          { role: 'system', content: systemPrompt },
-          ...recentMessages.map(msg => ({
-            role: msg.role,
-            content: msg.content,
-          })),
-        ];
-        
-        // Call AI wrapper
-        const aiResponse = (await AI.chatWithAI({
-          messages: messages as any,
-          model: 'gpt-4o-mini',
-          maxTokens: 500,
-          temperature: 0.7,
-        })) || 'I apologize, but I cannot provide a response at this time.';
-        
-        // Add AI response to session
-        session.messages.push({
-          id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          role: 'assistant',
-          content: aiResponse,
-          timestamp: new Date(),
-        });
-        
-        // Save session
-        await session.save();
-        
-        // Extract menu item recommendations from response (simple keyword matching)
-        const recommendedItems = [];
-        for (const item of menuItems) {
-          if (aiResponse.toLowerCase().includes(item.name.toLowerCase())) {
-            recommendedItems.push({
-              menuItemId: item._id.toString(),
-              name: item.name,
-              description: item.description,
-              price: item.price,
-              imageUrl: item.imageUrl,
-              confidence: 0.8,
-              reasons: ['Mentioned in conversation'],
-            });
-          }
-        }
-        
+  rateLimits.general(async (request: NextRequest) => {
+    try {
+      await dbConnect();
+      
+      // Get validated data from middleware
+      const { message, sessionId, context = {} } = (request as any).validatedData as ValidatedData;
+      
+      if (!message || message.length > MAX_MESSAGE_LENGTH) {
         return NextResponse.json(
-          createApiResponse({
-            message: aiResponse,
-            recommendations: recommendedItems,
-            sessionId: session.sessionId,
-            intent: 'general', // Could be enhanced with intent detection
-            confidence: 0.9,
-          })
-        );
-      } catch (error) {
-        console.error('[AI Chat API] Error:', error);
-        return NextResponse.json(
-          createApiError('Failed to process chat message'),
-          { status: 500 }
+          createApiError('Message is required and cannot exceed 4000 characters'),
+          { status: 400 }
         );
       }
+
+      // Get restaurant ID from context or use default
+      const restaurantId = context.restaurantId || process.env.DEFAULT_RESTAURANT_ID || 'default';
+      
+      // Find or create session
+      let session;
+      if (sessionId) {
+        session = await AISession.findOne({ sessionId });
+      }
+      
+      if (!session) {
+        // Create new session
+        session = new AISession({
+          sessionId: `ai_${Date.now()}_${randomUUID()}`,
+          messages: [],
+          context: {
+            restaurantId,
+            ...context
+          },
+          isActive: true
+        });
+      }
+      
+      // ensure session has context
+      session.context = session.context || { restaurantId: process.env.DEFAULT_RESTAURANT_ID || 'default' };
+      // ensure messages array helper (model also defends)
+      if (!Array.isArray(session.messages)) session.messages = Array.isArray(session.messages ? Object.values(session.messages) : []) ? Object.values(session.messages) : [];
+
+      // Helper: escape special characters in regex
+      function escapeRegExp(string: string) {
+        return string.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
+      }
+      
+      // DEBUG logs: helps track shape if error occurs (you can remove later)
+      console.log('[AI Chat] session.constructor.name =', session?.constructor?.name);
+      console.log('[AI Chat] messages isArray =', Array.isArray(session?.messages), 'len =', session?.messages?.length ?? 'n/a');
+      console.log('[AI Chat] hasSaveMethod =', typeof session?.save === 'function');
+
+  // Ensure messages is an array before pushing
+  if (!Array.isArray(session.messages)) session.messages = [];
+      const userMsgObj = {
+        id: `msg_${Date.now()}_${randomUUID()}`,
+        role: 'user',
+        content: message,
+        timestamp: new Date().toISOString(),
+      };
+
+      // push user message
+      (session as any).messages.push(userMsgObj);
+
+      // Keep only a bounded number of stored messages to avoid DB bloat
+      if ((session as any).messages.length > MAX_STORED_MESSAGES) {
+        session.messages = (session as any).messages.slice(-MAX_STORED_MESSAGES);
+      }
+
+      if (typeof session.markModified === 'function') session.markModified('messages');
+
+      // Fetch contextual menu items
+      const menuItems = await MenuItem.find({ active: true })
+        .select('name description price category tags imageUrl')
+        .lean();
+
+      // Build system prompt using helper (ensure it exists)
+      const systemPrompt = AI.buildSystemPrompt
+        ? AI.buildSystemPrompt(menuItems, session.context)
+        : `You are an assistant for a restaurant. Use available menu data to answer user queries.`;
+
+      // Prepare recent messages for model context
+      const recentMessages = (session.messages || []).slice(-RECENT_CONTEXT_MESSAGES);
+      const messagesForModel = [
+        { role: 'system', content: systemPrompt },
+        ...recentMessages.map((m: any) => ({ role: m.role, content: m.content })),
+      ];
+
+      // Call AI wrapper with improved error handling
+      let rawAiResp;
+      try {
+        console.log('[AI Chat] Sending request to AI with messages count=', messagesForModel.length);
+        rawAiResp = await AI.chatWithAI({
+          messages: messagesForModel as any,
+          model: 'gpt-4o-mini',
+          maxTokens: 800,
+          // use lower temperature by default for consistent answers; lib default is 0.0
+        });
+        console.log('[AI Chat] Received response from AI (truncated):', typeof rawAiResp === 'string' ? rawAiResp.substring(0, 100) : rawAiResp);
+      } catch (aiErr) {
+        console.error('[AI Chat] AI service error:', aiErr);
+        rawAiResp = null;
+      }
+
+      const aiResponse = normalizeAiResponse(rawAiResp) || 'I apologize, but I cannot provide a response at this time.';
+
+      // Add assistant reply to session
+      const assistantMsgObj = {
+        id: `msg_${Date.now()}_${randomUUID()}`,
+        role: 'assistant',
+        content: aiResponse,
+        timestamp: new Date().toISOString(),
+      };
+
+      // push assistant message
+      (session as any).messages.push(assistantMsgObj);
+
+      if ((session as any).messages.length > MAX_STORED_MESSAGES) {
+        session.messages = (session as any).messages.slice(-MAX_STORED_MESSAGES);
+      }
+
+  if (typeof session.markModified === 'function') session.markModified('messages');
+
+      // Save session
+      try {
+        await session.save();
+      } catch (saveErr) {
+        console.error('[AI Chat] Failed to save session:', saveErr);
+        // continue: still return AI response to user, but log DB error
+      }
+
+      // Recommendation extraction (word-boundary match to reduce false matches)
+      const recommendedItems: Array<any> = [];
+      for (const item of menuItems || []) {
+        if (!item?.name) continue;
+        const nameSafe = item.name.toString().trim();
+        const re = new RegExp(`\\b${escapeRegExp(nameSafe)}\\b`, 'i');
+        if (re.test(aiResponse)) {
+          recommendedItems.push({
+            menuItemId: item._id?.toString?.() ?? null,
+            name: item.name,
+            description: item.description ?? '',
+            price: item.price ?? null,
+            imageUrl: item.imageUrl ?? null,
+            confidence: 0.8,
+            reasons: ['Mentioned in conversation'],
+          });
+        }
+      }
+
+      return NextResponse.json(
+        createApiResponse({
+          message: aiResponse,
+          recommendations: recommendedItems,
+          sessionId: session.sessionId,
+          intent: 'general',
+          confidence: 0.9,
+        })
+      );
+    } catch (error) {
+      console.error('[AI Chat API] Unhandled Error:', error);
+      return NextResponse.json(createApiError('Failed to process chat message'), { status: 500 });
     }
-  )
+  })
 );

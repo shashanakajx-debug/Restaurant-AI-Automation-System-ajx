@@ -1,20 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import Link from 'next/link';
 import { z } from 'zod';
-import { loginSchema } from '@/schemas/auth';
+import { registerSchema } from '@/schemas/auth';
 
-export default function SignInPage() {
+export default function RegisterPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get('callbackUrl') || '/';
-  
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
+    name: '',
     email: '',
     password: '',
   });
@@ -36,7 +34,7 @@ export default function SignInPage() {
 
   const validateForm = () => {
     try {
-      loginSchema.parse(formData);
+      registerSchema.parse(formData);
       setFormErrors({});
       return true;
     } catch (error) {
@@ -64,23 +62,35 @@ export default function SignInPage() {
     setIsLoading(true);
     
     try {
-      console.log('Attempting sign in with:', { email: formData.email });
-      const result = await signIn('credentials', {
+      // Register the user
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to register');
+      }
+      
+      // Sign in the user after successful registration
+      const signInResult = await signIn('credentials', {
         email: formData.email,
         password: formData.password,
         redirect: false,
       });
       
-      console.log('Sign in result:', result);
-      
-      if (result?.error) {
-        throw new Error(result.error);
+      if (signInResult?.error) {
+        throw new Error(signInResult.error);
       }
       
-      router.push(callbackUrl);
+      // Redirect to home page after successful sign-in
+      router.push('/');
       router.refresh();
     } catch (err) {
-      console.error('Login error:', err);
+      console.error('Registration error:', err);
       setError(err instanceof Error ? err.message : 'An unexpected error occurred');
     } finally {
       setIsLoading(false);
@@ -89,17 +99,29 @@ export default function SignInPage() {
 
   return (
     <div className="max-w-sm mx-auto grid gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Sign In</h1>
-        <p className="text-gray-500">Enter your credentials to access your account</p>
-      </div>
-      
+      <h1 className="text-2xl font-semibold">Create an account</h1>
       <form onSubmit={handleSubmit} className="grid gap-4">
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded">
             {error}
           </div>
         )}
+        
+        <div className="grid gap-2">
+          <label className="text-sm" htmlFor="name">Name</label>
+          <input
+            id="name"
+            name="name"
+            type="text"
+            value={formData.name}
+            onChange={handleChange}
+            disabled={isLoading}
+            className={`border rounded p-2 w-full ${formErrors.name ? 'border-red-500' : 'border-gray-300'}`}
+          />
+          {formErrors.name && (
+            <p className="text-sm text-red-600">{formErrors.name}</p>
+          )}
+        </div>
         
         <div className="grid gap-2">
           <label className="text-sm" htmlFor="email">Email</label>
@@ -118,12 +140,7 @@ export default function SignInPage() {
         </div>
         
         <div className="grid gap-2">
-          <div className="flex justify-between items-center">
-            <label className="text-sm" htmlFor="password">Password</label>
-            <Link href="/forgot-password" className="text-sm text-blue-600 hover:underline">
-              Forgot password?
-            </Link>
-          </div>
+          <label className="text-sm" htmlFor="password">Password</label>
           <input
             id="password"
             name="password"
@@ -136,21 +153,23 @@ export default function SignInPage() {
           {formErrors.password && (
             <p className="text-sm text-red-600">{formErrors.password}</p>
           )}
+          <p className="text-xs text-gray-500">
+            Must be at least 8 characters with uppercase, lowercase, and number
+          </p>
         </div>
         
         <button 
           type="submit" 
-          className="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded transition-colors" 
+          className="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded transition-colors"
           disabled={isLoading}
         >
-          {isLoading ? 'Signing in...' : 'Sign In'}
+          {isLoading ? 'Registering...' : 'Register'}
         </button>
       </form>
-      
       <p className="text-sm text-center">
-        Don't have an account?{' '}
-        <Link href="/register" className="text-blue-600 hover:underline">
-          Register
+        Already have an account?{' '}
+        <Link href="/login" className="text-blue-600 hover:underline">
+          Sign in
         </Link>
       </p>
     </div>
