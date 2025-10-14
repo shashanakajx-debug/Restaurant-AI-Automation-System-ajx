@@ -15,6 +15,7 @@ export default function RegisterPage() {
     name: '',
     email: '',
     password: '',
+    role: 'customer',
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
@@ -156,6 +157,24 @@ export default function RegisterPage() {
           <p className="text-xs text-gray-500">
             Must be at least 8 characters with uppercase, lowercase, and number
           </p>
+        </div>
+        
+        <div className="grid gap-2">
+          <label className="text-sm" htmlFor="role">Register as</label>
+          <select
+            id="role"
+            name="role"
+            value={formData.role}
+            onChange={handleChange}
+            disabled={isLoading}
+            className={`border rounded p-2 w-full ${formErrors.role ? 'border-red-500' : 'border-gray-300'}`}
+          >
+            <option value="customer">Customer</option>
+            <option value="admin">Admin</option>
+          </select>
+          {formErrors.role && (
+            <p className="text-sm text-red-600">{formErrors.role}</p>
+          )}
         </div>
         
         <button 

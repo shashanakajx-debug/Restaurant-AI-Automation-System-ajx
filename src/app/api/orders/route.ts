@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongoose';
 import Order from '@/models/Order';
 import MenuItem from '@/models/MenuItem';
-import { createOrderSchema, orderFilterSchema } from '@/schemas/order';
+import { createOrderSchema, orderFilterSchema, OrderItemInput, CreateOrderInput, OrderFilterInput } from '@/schemas/order';
 import { withCorsAuthAndValidation, rateLimits } from '@/middleware';
 import { createApiResponse, createApiError } from '@/lib/utils/api';
 import { calculateTotal } from '@/lib/utils/currency';
@@ -10,13 +10,14 @@ import { calculateTotal } from '@/lib/utils/currency';
 // GET /api/orders - Get orders with filtering and pagination
 export const GET = withCorsAuthAndValidation(
   orderFilterSchema,
-  { origin: true, methods: ['GET'], credentials: true }
+  { origin: true, methods: ['GET'], credentials: false }
 )(
   rateLimits.general(
     async (request) => {
       try {
         await dbConnect();
         
+        const validated = ((request as unknown) as { validatedData: OrderFilterInput }).validatedData;
         const {
           status,
           paymentStatus,
@@ -27,10 +28,10 @@ export const GET = withCorsAuthAndValidation(
           sortOrder = 'desc',
           page = 1,
           limit = 20,
-        } = (request as any).validatedData!;
+        } = validated;
 
         // Build query
-        const query: any = {};
+  const query: Record<string, unknown> = {};
         
         if (status) {
           query.status = status;
@@ -41,13 +42,14 @@ export const GET = withCorsAuthAndValidation(
         }
         
         if (dateFrom || dateTo) {
-          query.createdAt = {};
+          const createdAt: Record<string, unknown> = {};
           if (dateFrom) {
-            query.createdAt.$gte = new Date(dateFrom);
+            (createdAt as Record<string, unknown>)['$gte'] = new Date(dateFrom);
           }
           if (dateTo) {
-            query.createdAt.$lte = new Date(dateTo);
+            (createdAt as Record<string, unknown>)['$lte'] = new Date(dateTo);
           }
+          query.createdAt = createdAt;
         }
         
         if (customerEmail) {
@@ -55,7 +57,7 @@ export const GET = withCorsAuthAndValidation(
         }
 
         // Build sort object
-        const sort: any = {};
+  const sort: Record<string, 1 | -1> = {};
         sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
 
         // Calculate pagination
@@ -100,18 +102,18 @@ export const GET = withCorsAuthAndValidation(
 // POST /api/orders - Create new order
 export const POST = withCorsAuthAndValidation(
   createOrderSchema,
-  { origin: true, methods: ['POST'], credentials: true }
+  { origin: true, methods: ['POST'], credentials: false }
 )(
   rateLimits.general(
-    async (request) => {
+  async (request): Promise<NextResponse> => {
       try {
         await dbConnect();
         
-        const orderData = (request as any).validatedData!;
+        const orderData = ((request as unknown) as { validatedData?: CreateOrderInput }).validatedData!;
         
         // Fetch menu items to get current prices and names
-  type IncomingOrderItem = { menuItemId: string; quantity: number; specialInstructions?: string };
-  const menuItemIds = (orderData.items as IncomingOrderItem[]).map((item) => item.menuItemId);
+  // Use the schema types for safety
+  const menuItemIds = (orderData.items as OrderItemInput[]).map((item) => item.menuItemId);
         const menuItems = await MenuItem.find({
           _id: { $in: menuItemIds },
           active: true,
@@ -123,7 +125,13 @@ export const POST = withCorsAuthAndValidation(
         );
         
         // Validate all items exist and build order items
-        const orderItems = [];
+        const orderItems: Array<{
+          menuItemId: string;
+          name: string;
+          price: number;
+          quantity: number;
+          specialInstructions?: string;
+        }> = [];
         let subtotal = 0;
         
         for (const item of orderData.items) {

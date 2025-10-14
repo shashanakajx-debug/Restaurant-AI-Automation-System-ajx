@@ -30,6 +30,15 @@ export async function withAuth(
       );
     }
 
+    // Debug: log token summary to help diagnose permission issues in dev
+    try {
+      // Avoid logging sensitive full token in production
+      const tokenSummary = { id: token.id, email: token.email, role: token.role };
+      console.log('[Auth Middleware] Token summary:', tokenSummary);
+    } catch (e) {
+      // ignore
+    }
+
     // Check if user has required role
     if (requiredRole && token.role !== requiredRole) {
       // Check role hierarchy
@@ -85,4 +94,12 @@ export function requireStaff() {
 
 export function requireCustomer() {
   return requireAuth('customer');
+}
+
+// Add a specific middleware for admin routes
+export async function withAdminAuth(
+  request: NextRequest,
+  handler: (req: AuthenticatedRequest) => Promise<NextResponse>
+): Promise<NextResponse> {
+  return withAuth(request, handler, 'admin');
 }

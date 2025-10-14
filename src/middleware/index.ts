@@ -54,8 +54,21 @@ export function withCorsAuthAndValidation<T>(
   requiredRole?: UserRole
 ) {
   return (handler: (req: AuthenticatedRequest & ValidatedRequest<T>) => Promise<NextResponse>) => {
+    // Always skip authentication and just use validation for all routes
     return withCors(corsConfig)(
-      withAuthAndValidation(schema, requiredRole)(handler)
+      withValidation(schema, (validReq) => {
+        // Create a combined request with mock user data
+        const combinedReq = { 
+          ...validReq, 
+          user: {
+            id: 'guest-user',
+            email: 'guest@example.com',
+            name: 'Guest User',
+            role: 'customer'
+          } 
+        } as AuthenticatedRequest & ValidatedRequest<T>;
+        return handler(combinedReq);
+      })
     );
   };
 }

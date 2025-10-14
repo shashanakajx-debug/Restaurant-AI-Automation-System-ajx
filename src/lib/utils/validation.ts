@@ -46,7 +46,14 @@ export function isValidPassword(password: string): {
 
 export function isValidUrl(url: string): boolean {
   try {
-    new URL(url);
+    // Some runtimes may pass relative paths (e.g. '/api/menu'). new URL(relative)
+    // throws, so provide a fallback base to allow validation without errors.
+    try {
+      new URL(url);
+    } catch (e) {
+      const base = process.env.NEXTAUTH_URL || `http://localhost:${process.env.PORT || 3000}`;
+      new URL(url, base);
+    }
     return true;
   } catch {
     return false;

@@ -39,7 +39,7 @@ export interface AIResponse {
   recommendations?: AIRecommendation[];
   intent?: string;
   confidence?: number;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ChatRequest {

@@ -68,6 +68,14 @@ export const changePasswordSchema = z.object({
   path: ["confirmPassword"],
 });
 
+// User preferences schema
+export const userPreferencesSchema = z.object({
+  dietaryRestrictions: z.array(z.string()).default([]),
+  favoriteCategories: z.array(z.string()).default([]),
+  spiceLevel: z.enum(['mild', 'medium', 'hot', 'extra_hot']).default('medium'),
+  budget: z.number().min(0).default(0),
+});
+
 // Update profile schema
 export const updateProfileSchema = z.object({
   name: z
@@ -104,4 +112,5 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type PasswordResetInput = z.infer<typeof passwordResetSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+export type UserPreferencesInput = z.infer<typeof userPreferencesSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;

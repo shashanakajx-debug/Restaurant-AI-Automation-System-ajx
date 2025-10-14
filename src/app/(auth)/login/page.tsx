@@ -84,10 +84,16 @@ export default function SignInPage() {
       console.log('Sign in result:', result);
       
       if (result?.error) {
-        throw new Error(result.error);
+        // Provide more specific error messages for common auth errors
+        if (result.error === 'CredentialsSignin') {
+          throw new Error('Invalid email or password. Please try again.');
+        } else {
+          throw new Error(result.error);
+        }
       }
       
-  router.push(getCallbackUrl());
+      // Successful login - redirect to callback URL or profile page
+      router.push(getCallbackUrl());
       router.refresh();
     } catch (err) {
       console.error('Login error:', err);
@@ -158,7 +164,7 @@ export default function SignInPage() {
       </form>
       
       <p className="text-sm text-center">
-        Don't have an account?{' '}
+        Do not have an account?{' '}
         <Link href="/register" className="text-blue-600 hover:underline">
           Register
         </Link>

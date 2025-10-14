@@ -1,6 +1,6 @@
 "use client"
 import { useEffect, useRef, useState } from 'react'
-import { ChatBubbleLeftRightIcon, PaperAirplaneIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { ChatBubbleLeftRightIcon, PaperAirplaneIcon, XMarkIcon, AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline'
 
 type Message = {
   role: 'user' | 'assistant';
@@ -14,6 +14,15 @@ type Recommendation = {
   description: string;
   price: number;
   imageUrl: string | null;
+  category?: string;
+  dietaryInfo?: string[];
+}
+
+type UserPreference = {
+  dietaryRestrictions?: string[];
+  favoriteCategories?: string[];
+  spiceLevel?: 'mild' | 'medium' | 'hot';
+  budget?: number;
 }
 
 // Minimal API response typing used by many routes
@@ -25,12 +34,23 @@ type ApiResponse<T = any> = {
 };
 
 export default function ChatWidget() {
+  // Mock session data to avoid requiring SessionProvider (typed loosely)
+  const session: any | null = null
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [retrying, setRetrying] = useState(false)
   const [sessionId, setSessionId] = useState<string | undefined>(undefined)
   const [messages, setMessages] = useState<Message[]>([])
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
+  const [showPreferences, setShowPreferences] = useState(false)
+  const [userPreferences, setUserPreferences] = useState<UserPreference>({
+    dietaryRestrictions: [],
+    favoriteCategories: [],
+    spiceLevel: 'medium',
+    budget: 0
+  })
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -74,6 +94,68 @@ export default function ChatWidget() {
     }
   }, [messages])
 
+  // Load user preferences from session if available
+  useEffect(() => {
+    if (session?.user) {
+      // Try to load preferences from localStorage first
+      const savedPrefs = window.localStorage.getItem('user_ai_preferences')
+      if (savedPrefs) {
+        try {
+          setUserPreferences(JSON.parse(savedPrefs))
+        } catch (e) {
+          console.error('Failed to parse saved preferences', e)
+        }
+      } else {
+        // If not in localStorage, try to fetch from API
+        fetchUserPreferences()
+      }
+    }
+  }, [session])
+
+  // Fetch user preferences from API
+  async function fetchUserPreferences() {
+    if (!session?.user) return
+    
+    try {
+      const res = await fetch('/api/user/preferences')
+      const data = await res.json()
+      
+      if (data.success && data.data) {
+        const prefs = data.data
+        setUserPreferences({
+          dietaryRestrictions: prefs.dietaryRestrictions || [],
+          favoriteCategories: prefs.favoriteCategories || [],
+          spiceLevel: prefs.spiceLevel || 'medium',
+          budget: prefs.budget || 0
+        })
+        
+        // Save to localStorage for faster access next time
+        window.localStorage.setItem('user_ai_preferences', JSON.stringify(prefs))
+      }
+    } catch (e) {
+      console.error('Failed to fetch user preferences', e)
+    }
+  }
+
+  // Save preferences to localStorage and API
+  async function savePreferences() {
+    window.localStorage.setItem('user_ai_preferences', JSON.stringify(userPreferences))
+    
+    if (session?.user) {
+      try {
+        await fetch('/api/user/preferences', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(userPreferences)
+        })
+      } catch (e) {
+        console.error('Failed to save preferences to API', e)
+      }
+    }
+    
+    setShowPreferences(false)
+  }
+
   // Send message to API
   async function send() {
     if (!input.trim()) return
@@ -95,7 +177,9 @@ export default function ChatWidget() {
           message: userMsg.content, 
           sessionId,
           context: {
-            currentPage: window.location.pathname
+            currentPage: window.location.pathname,
+            userPreferences: userPreferences,
+            userId: session?.user?.id
           }
         })
       })
@@ -262,16 +346,168 @@ export default function ChatWidget() {
         </div>
       )}
       
-      <button 
-        className="btn-primary h-12 w-12 rounded-full shadow-lg flex items-center justify-center"
-        onClick={() => setOpen(!open)}
-      >
-        {open ? (
-          <XMarkIcon className="w-6 h-6" />
-        ) : (
-          <ChatBubbleLeftRightIcon className="w-6 h-6" />
+      {/* Preferences Panel */}
+      {open && showPreferences && (
+        <div className="card w-96 h-[500px] mb-3 flex flex-col shadow-lg bg-white dark:bg-gray-800 rounded-lg overflow-hidden absolute bottom-0 right-0">
+          <div className="px-4 py-3 border-b flex items-center justify-between bg-primary/10">
+            <div className="flex items-center gap-2">
+              <AdjustmentsHorizontalIcon className="w-5 h-5 text-primary" />
+              <h3 className="font-medium">Your Preferences</h3>
+            </div>
+            <button 
+              onClick={() => setShowPreferences(false)}
+              className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+            >
+              <XMarkIcon className="w-5 h-5" />
+            </button>
+          </div>
+          
+          <div className="flex-1 overflow-auto p-4 space-y-6">
+            {/* Dietary Restrictions */}
+            <div>
+              <h4 className="font-medium mb-2 text-sm">Dietary Restrictions</h4>
+              <div className="flex flex-wrap gap-2">
+                {['vegetarian', 'vegan', 'gluten-free', 'dairy-free', 'nut-free', 'halal', 'kosher'].map(diet => (
+                  <button
+                    key={diet}
+                    onClick={() => {
+                      setUserPreferences(prev => {
+                        const restrictions = prev.dietaryRestrictions || [];
+                        return {
+                          ...prev,
+                          dietaryRestrictions: restrictions.includes(diet)
+                            ? restrictions.filter(r => r !== diet)
+                            : [...restrictions, diet]
+                        };
+                      });
+                    }}
+                    className={`text-xs rounded-full px-3 py-1 ${
+                      userPreferences.dietaryRestrictions?.includes(diet)
+                        ? 'bg-primary text-white'
+                        : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200'
+                    }`}
+                  >
+                    {diet}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            {/* Favorite Categories */}
+            <div>
+              <h4 className="font-medium mb-2 text-sm">Favorite Categories</h4>
+              <div className="flex flex-wrap gap-2">
+                {['appetizers', 'soups', 'salads', 'main-courses', 'desserts', 'drinks', 'specials'].map(category => (
+                  <button
+                    key={category}
+                    onClick={() => {
+                      setUserPreferences(prev => {
+                        const favorites = prev.favoriteCategories || [];
+                        return {
+                          ...prev,
+                          favoriteCategories: favorites.includes(category)
+                            ? favorites.filter(c => c !== category)
+                            : [...favorites, category]
+                        };
+                      });
+                    }}
+                    className={`text-xs rounded-full px-3 py-1 ${
+                      userPreferences.favoriteCategories?.includes(category)
+                        ? 'bg-primary text-white'
+                        : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200'
+                    }`}
+                  >
+                    {category}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            {/* Spice Level */}
+            <div>
+              <h4 className="font-medium mb-2 text-sm">Spice Preference</h4>
+              <div className="flex gap-2">
+                {['mild', 'medium', 'hot'].map(level => (
+                  <button
+                    key={level}
+                    onClick={() => {
+                      setUserPreferences(prev => ({
+                        ...prev,
+                        spiceLevel: level as 'mild' | 'medium' | 'hot'
+                      }));
+                    }}
+                    className={`text-xs rounded-full px-4 py-1.5 flex-1 ${
+                      userPreferences.spiceLevel === level
+                        ? 'bg-primary text-white'
+                        : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200'
+                    }`}
+                  >
+                    {level}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            {/* Budget */}
+            <div>
+              <h4 className="font-medium mb-2 text-sm">Budget (per person)</h4>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={userPreferences.budget || 0}
+                  onChange={e => {
+                    setUserPreferences(prev => ({
+                      ...prev,
+                      budget: parseInt(e.target.value)
+                    }));
+                  }}
+                  className="flex-1"
+                />
+                <span className="text-sm font-medium">
+                  ${userPreferences.budget || 0}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {userPreferences.budget === 0 ? 'No budget limit' : `Budget: $${userPreferences.budget} per person`}
+              </p>
+            </div>
+          </div>
+          
+          <div className="p-3 border-t flex justify-end">
+            <button
+              onClick={savePreferences}
+              className="bg-primary text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90"
+            >
+              Save Preferences
+            </button>
+          </div>
+        </div>
+      )}
+      
+      <div className="flex gap-2">
+        {open && (
+          <button
+            className="btn-secondary h-12 w-12 rounded-full shadow-lg flex items-center justify-center"
+            onClick={() => setShowPreferences(!showPreferences)}
+            title="Set your preferences"
+          >
+            <AdjustmentsHorizontalIcon className="w-6 h-6" />
+          </button>
         )}
-      </button>
+        <button 
+          className="btn-primary h-12 w-12 rounded-full shadow-lg flex items-center justify-center"
+          onClick={() => setOpen(!open)}
+        >
+          {open ? (
+            <XMarkIcon className="w-6 h-6" />
+          ) : (
+            <ChatBubbleLeftRightIcon className="w-6 h-6" />
+          )}
+        </button>
+      </div>
     </div>
   )
 }

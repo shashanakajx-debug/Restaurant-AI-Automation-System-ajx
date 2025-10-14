@@ -135,3 +135,7 @@ export function retry<T>(
     }
   });
 }
+
+export function fetchWithRetry(arg0: string, arg1: { method: string; headers: { 'Content-Type': string; }; body: string; maxRetries: number; }) {
+    throw new Error('Function not implemented.');
+}

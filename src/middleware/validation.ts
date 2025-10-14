@@ -78,8 +78,17 @@ export function validateQuery<T>(schema: ZodSchema<T>) {
   return (handler: (req: ValidatedRequest<T>) => Promise<NextResponse>) => {
     return async (request: NextRequest): Promise<NextResponse> => {
       try {
-        const url = new URL(request.url);
-        const queryParams = Object.fromEntries(url.searchParams.entries());
+        // `request.url` may be a relative path (e.g. '/api/menu') in some runtimes.
+        // new URL(...) will throw for relative URLs, so provide a fallback base.
+        let urlObj: URL;
+        try {
+          urlObj = new URL(request.url);
+        } catch (e) {
+          const base = process.env.NEXTAUTH_URL || `http://localhost:${process.env.PORT || 3000}`;
+          urlObj = new URL(request.url, base);
+        }
+
+        const queryParams = Object.fromEntries(urlObj.searchParams.entries());
         
         const validatedData = schema.parse(queryParams);
         
