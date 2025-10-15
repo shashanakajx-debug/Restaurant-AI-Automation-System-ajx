@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from 'react';
-import { z } from 'zod';
-import Link from 'next/link';
+import { useState } from "react";
+import { z } from "zod";
+import Link from "next/link";
 
 const forgotPasswordSchema = z.object({
-  email: z.string().email('Please enter a valid email address'),
+  email: z.string().email("Please enter a valid email address"),
 });
 
 export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -20,15 +20,13 @@ export default function ForgotPasswordPage() {
       forgotPasswordSchema.parse({ email });
       setFormErrors({});
       return true;
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        const errors: Record<string, string> = {};
-        error.errors.forEach((err) => {
-          if (err.path[0]) {
-            errors[err.path[0] as string] = err.message;
-          }
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        const newErrors: Record<string, string> = {};
+        err.errors.forEach((e) => {
+          if (e.path[0]) newErrors[e.path[0] as string] = e.message;
         });
-        setFormErrors(errors);
+        setFormErrors(newErrors);
       }
       return false;
     }
@@ -37,30 +35,23 @@ export default function ForgotPasswordPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    
-    if (!validateForm()) {
-      return;
-    }
-    
+
+    if (!validateForm()) return;
+
     setIsLoading(true);
-    
     try {
-      const response = await fetch('/api/auth/forgot-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to process request');
-      }
-      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to process request");
+
       setSuccess(true);
     } catch (err) {
-      console.error('Forgot password error:', err);
-      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
+      console.error("Forgot password error:", err);
+      setError(err instanceof Error ? err.message : "An unexpected error occurred");
     } finally {
       setIsLoading(false);
     }
@@ -72,10 +63,10 @@ export default function ForgotPasswordPage() {
         <h1 className="text-2xl font-semibold">Forgot Password</h1>
         <p className="text-gray-500">Enter your email to receive a password reset link</p>
       </div>
-      
+
       {success ? (
         <div className="bg-green-50 border border-green-200 text-green-600 p-4 rounded">
-          <p>Password reset link has been sent to your email address.</p>
+          <p>Password reset link has been sent to your email address (if an account exists).</p>
           <p className="mt-2">
             <Link href="/login" className="text-blue-600 hover:underline">
               Return to login
@@ -83,38 +74,54 @@ export default function ForgotPasswordPage() {
           </p>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="grid gap-4">
+        <form onSubmit={handleSubmit} className="grid gap-4" noValidate>
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded">
+            <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded" role="alert">
               {error}
             </div>
           )}
-          
+
           <div className="grid gap-2">
-            <label className="text-sm" htmlFor="email">Email</label>
+            <label className="text-sm" htmlFor="email">
+              Email
+            </label>
             <input
               id="email"
               name="email"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (formErrors.email) {
+                  setFormErrors((p) => {
+                    const copy = { ...p };
+                    delete copy.email;
+                    return copy;
+                  });
+                }
+              }}
               disabled={isLoading}
-              className={`border rounded p-2 w-full ${formErrors.email ? 'border-red-500' : 'border-gray-300'}`}
-              placeholder="your@email.com"
+              className={`border rounded p-2 w-full ${formErrors.email ? "border-red-500" : "border-gray-300"}`}
+              placeholder="you@example.com"
+              aria-invalid={!!formErrors.email}
+              aria-describedby={formErrors.email ? "email-error" : undefined}
             />
             {formErrors.email && (
-              <p className="text-sm text-red-600">{formErrors.email}</p>
+              <p id="email-error" className="text-sm text-red-600">
+                {formErrors.email}
+              </p>
             )}
           </div>
-          
+
           <button
             type="submit"
             disabled={isLoading}
             className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 disabled:opacity-50"
+            aria-busy={isLoading}
           >
-            {isLoading ? 'Processing...' : 'Send Reset Link'}
+            {isLoading ? "Processing..." : "Send Reset Link"}
           </button>
-          
+
           <div className="text-center">
             <Link href="/login" className="text-sm text-blue-600 hover:underline">
               Back to login

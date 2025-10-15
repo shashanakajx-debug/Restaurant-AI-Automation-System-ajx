@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongoose';
 import MenuItem from '@/models/MenuItem';
 import { menuFilterSchema, menuItemSchema } from '@/schemas/menu';
-import { withCorsAuthAndValidation, rateLimits, withAuth } from '@/middleware';
+import { withCorsAuthAndValidation, rateLimits } from '@/middleware';
 import { createApiResponse, createApiError } from '@/lib/utils/api';
-import { ZodError } from 'zod';
 
 // GET /api/menu - Get menu items with filtering and pagination
 export const GET = withCorsAuthAndValidation(
@@ -133,48 +132,42 @@ export const GET = withCorsAuthAndValidation(
   )
 );
 
-// POST /api/menu - Create new menu item (All users)
-export async function POST(request: NextRequest) {
-  // Admin-only: create new menu item
-  return withAuth(request, async (authReq) => {
-    try {
-      // Debug: log authenticated user info to help diagnose 403
+// POST /api/menu - Create new menu item (Admin only)
+export const POST = withCorsAuthAndValidation(
+  menuItemSchema,
+  { origin: true, methods: ['POST'], credentials: true },
+  'admin'
+)(
+  rateLimits.admin(
+    async (request) => {
       try {
-        console.log('[Menu API] Authenticated request user:', authReq.user);
-      } catch (e) { /* ignore */ }
-
-      // Require admin role (defensive check)
-      if (!authReq.user || authReq.user.role !== 'admin') {
-        return NextResponse.json(createApiError('Insufficient permissions'), { status: 403 });
-      }
-
-      await dbConnect();
-
-      // Use the authenticated request for body parsing (some middleware may wrap request)
-      const body = await authReq.json();
-
-      // Validate input
-      let validated;
-      try {
-        validated = menuItemSchema.parse(body);
-      } catch (err) {
-        if (err instanceof ZodError) {
-          const details = err.errors.map(e => ({ field: e.path.join('.'), message: e.message }));
-          return NextResponse.json({ success: false, error: 'Validation failed', details }, { status: 400 });
+        await dbConnect();
+        
+        const menuItemData = (request as any).validatedData!;
+        
+        // Create new menu item
+        const menuItem = new MenuItem(menuItemData);
+        await menuItem.save();
+        
+        return NextResponse.json(
+          createApiResponse(menuItem, 'Menu item created successfully'),
+          { status: 201 }
+        );
+      } catch (error) {
+        console.error('[Menu API] Create error:', error);
+        
+        if (error instanceof Error && error.message.includes('duplicate key')) {
+          return NextResponse.json(
+            createApiError('Menu item with this name already exists'),
+            { status: 409 }
+          );
         }
-        throw err;
+        
+        return NextResponse.json(
+          createApiError('Failed to create menu item'),
+          { status: 500 }
+        );
       }
-
-      const menuItem = new MenuItem(validated);
-      await menuItem.save();
-
-      return NextResponse.json(createApiResponse(menuItem, 'Menu item created successfully'), { status: 201 });
-    } catch (error: any) {
-      console.error('[Menu API] Create error:', error);
-      if (error instanceof Error && error.message.includes('duplicate key')) {
-        return NextResponse.json(createApiError('Menu item with this name already exists'), { status: 409 });
-      }
-      return NextResponse.json(createApiError('Failed to create menu item'), { status: 500 });
     }
-  }, 'admin');
-}
+  )
+);

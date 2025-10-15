@@ -1,74 +1,45 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { z } from 'zod';
-import Link from 'next/link';
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { z } from "zod";
+import Link from "next/link";
 
-const resetPasswordSchema = z.object({
-  password: z.string()
-    .min(8, 'Password must be at least 8 characters')
-    .max(100, 'Password must be less than 100 characters'),
-  confirmPassword: z.string(),
-}).refine(data => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"],
-});
+const resetPasswordSchema = z
+  .object({
+    password: z.string().min(8, "Password must be at least 8 characters").max(100),
+    confirmPassword: z.string(),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  });
 
 export default function ResetPasswordPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const token = searchParams?.get('token');
-  
-  const [formData, setFormData] = useState({
-    password: '',
-    confirmPassword: '',
-  });
+  const token = searchParams?.get("token") ?? "";
+
+  const [formData, setFormData] = useState({ password: "", confirmPassword: "" });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [tokenValid, setTokenValid] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Verify token on component mount
-    const verifyToken = async () => {
-      if (!token) {
-        setTokenValid(false);
-        setError('Invalid or missing reset token');
-        return;
-      }
-
-      try {
-        const response = await fetch(`/api/auth/verify-reset-token?token=${token}`);
-        const data = await response.json();
-        
-        if (!response.ok) {
-          setTokenValid(false);
-          setError(data.error || 'Invalid or expired token');
-        } else {
-          setTokenValid(true);
-        }
-      } catch (err) {
-        console.error('Token verification error:', err);
-        setTokenValid(false);
-        setError('Failed to verify reset token');
-      }
-    };
-
-    verifyToken();
+    if (!token) {
+      setError("Invalid or missing reset token");
+    }
   }, [token]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    
-    // Clear error for this field when user types
+    setFormData((p) => ({ ...p, [name]: value }));
     if (formErrors[name]) {
-      setFormErrors((prev) => {
-        const newErrors = { ...prev };
-        delete newErrors[name];
-        return newErrors;
+      setFormErrors((p) => {
+        const copy = { ...p };
+        delete copy[name];
+        return copy;
       });
     }
   };
@@ -78,15 +49,13 @@ export default function ResetPasswordPage() {
       resetPasswordSchema.parse(formData);
       setFormErrors({});
       return true;
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        const errors: Record<string, string> = {};
-        error.errors.forEach((err) => {
-          if (err.path[0]) {
-            errors[err.path[0] as string] = err.message;
-          }
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        const newErrors: Record<string, string> = {};
+        err.errors.forEach((e) => {
+          if (e.path[0]) newErrors[e.path[0] as string] = e.message;
         });
-        setFormErrors(errors);
+        setFormErrors(newErrors);
       }
       return false;
     }
@@ -95,43 +64,45 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    
-    if (!validateForm()) {
+
+    if (!token) {
+      setError("Missing reset token");
       return;
     }
-    
+
+    if (!validateForm()) return;
+
     setIsLoading(true);
-    
     try {
-      const response = await fetch('/api/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token,
-          password: formData.password,
-        }),
+      const res = await fetch("/api/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, password: formData.password }),
       });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to reset password');
-      }
-      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to reset password");
+
       setSuccess(true);
+      // Optionally redirect to login after short delay
+      setTimeout(() => router.push("/login"), 1500);
     } catch (err) {
-      console.error('Password reset error:', err);
-      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
+      console.error("Password reset error:", err);
+      setError(err instanceof Error ? err.message : "An unexpected error occurred");
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (tokenValid === null) {
+  if (!token) {
     return (
       <div className="max-w-sm mx-auto grid gap-6">
-        <div className="flex justify-center items-center py-8">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+        <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded">
+          <p>{error || "Invalid or expired password reset link"}</p>
+          <p className="mt-2">
+            <Link href="/forgot-password" className="text-blue-600 hover:underline">
+              Request a new password reset link
+            </Link>
+          </p>
         </div>
       </div>
     );
@@ -143,17 +114,8 @@ export default function ResetPasswordPage() {
         <h1 className="text-2xl font-semibold">Reset Password</h1>
         <p className="text-gray-500">Enter your new password below</p>
       </div>
-      
-      {!tokenValid ? (
-        <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded">
-          <p>{error || 'Invalid or expired password reset link'}</p>
-          <p className="mt-2">
-            <Link href="/forgot-password" className="text-blue-600 hover:underline">
-              Request a new password reset link
-            </Link>
-          </p>
-        </div>
-      ) : success ? (
+
+      {success ? (
         <div className="bg-green-50 border border-green-200 text-green-600 p-4 rounded">
           <p>Your password has been reset successfully.</p>
           <p className="mt-2">
@@ -163,15 +125,17 @@ export default function ResetPasswordPage() {
           </p>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="grid gap-4">
+        <form onSubmit={handleSubmit} className="grid gap-4" noValidate>
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded">
+            <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded" role="alert">
               {error}
             </div>
           )}
-          
+
           <div className="grid gap-2">
-            <label className="text-sm" htmlFor="password">New Password</label>
+            <label className="text-sm" htmlFor="password">
+              New Password
+            </label>
             <input
               id="password"
               name="password"
@@ -179,15 +143,21 @@ export default function ResetPasswordPage() {
               value={formData.password}
               onChange={handleChange}
               disabled={isLoading}
-              className={`border rounded p-2 w-full ${formErrors.password ? 'border-red-500' : 'border-gray-300'}`}
+              className={`border rounded p-2 w-full ${formErrors.password ? "border-red-500" : "border-gray-300"}`}
+              aria-invalid={!!formErrors.password}
+              aria-describedby={formErrors.password ? "password-error" : undefined}
             />
             {formErrors.password && (
-              <p className="text-sm text-red-600">{formErrors.password}</p>
+              <p id="password-error" className="text-sm text-red-600">
+                {formErrors.password}
+              </p>
             )}
           </div>
-          
+
           <div className="grid gap-2">
-            <label className="text-sm" htmlFor="confirmPassword">Confirm Password</label>
+            <label className="text-sm" htmlFor="confirmPassword">
+              Confirm Password
+            </label>
             <input
               id="confirmPassword"
               name="confirmPassword"
@@ -195,19 +165,24 @@ export default function ResetPasswordPage() {
               value={formData.confirmPassword}
               onChange={handleChange}
               disabled={isLoading}
-              className={`border rounded p-2 w-full ${formErrors.confirmPassword ? 'border-red-500' : 'border-gray-300'}`}
+              className={`border rounded p-2 w-full ${formErrors.confirmPassword ? "border-red-500" : "border-gray-300"}`}
+              aria-invalid={!!formErrors.confirmPassword}
+              aria-describedby={formErrors.confirmPassword ? "confirmPassword-error" : undefined}
             />
             {formErrors.confirmPassword && (
-              <p className="text-sm text-red-600">{formErrors.confirmPassword}</p>
+              <p id="confirmPassword-error" className="text-sm text-red-600">
+                {formErrors.confirmPassword}
+              </p>
             )}
           </div>
-          
+
           <button
             type="submit"
             disabled={isLoading}
             className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 disabled:opacity-50"
+            aria-busy={isLoading}
           >
-            {isLoading ? 'Resetting...' : 'Reset Password'}
+            {isLoading ? "Resetting..." : "Reset Password"}
           </button>
         </form>
       )}
