@@ -1,4 +1,4 @@
-// src/app/api/auth/forgot-password/route.ts
+// app/api/forgot-password/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongoose';
 import User from '@/models/User';
