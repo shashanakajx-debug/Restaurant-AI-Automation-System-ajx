@@ -1,5 +1,5 @@
-// Simple email service for development
-// In production, you would use a real email service like SendGrid, Mailgun, etc.
+// src/lib/email/sendEmail.ts
+import { Resend } from 'resend';
 
 interface EmailOptions {
   to: string;
@@ -8,31 +8,36 @@ interface EmailOptions {
 }
 
 export async function sendEmail({ to, subject, html }: EmailOptions): Promise<boolean> {
-  // In development, we'll just log the email
-  if (process.env.NODE_ENV !== 'production') {
-    console.log('=================== EMAIL SENT ===================');
-    console.log(`To: ${to}`);
-    console.log(`Subject: ${subject}`);
-    console.log('Content:');
-    console.log(html);
-    console.log('=================================================');
-    return true;
-  }
-
-  // In production, you would integrate with a real email service
   try {
-    // Example with a hypothetical email service:
-    // const response = await emailServiceClient.send({
-    //   to,
-    //   subject,
-    //   html,
-    //   from: process.env.EMAIL_FROM
-    // });
-    
-    // For now, we'll just simulate success
+    // In development without API key, log to console
+    if (!process.env.RESEND_API_KEY) {
+      console.log('=================== EMAIL (DEV MODE - NO API KEY) ===================');
+      console.log('To:', to);
+      console.log('Subject:', subject);
+      console.log('Content:', html);
+      console.log('=====================================================================');
+      console.log('⚠️  Set RESEND_API_KEY in .env.local to send real emails');
+      return true;
+    }
+
+    const resend = new Resend(process.env.RESEND_API_KEY);
+
+    const { data, error } = await resend.emails.send({
+      from: process.env.EMAIL_FROM || 'onboarding@resend.dev',
+      to: [to],
+      subject,
+      html,
+    });
+
+    if (error) {
+      console.error('❌ Resend error:', error);
+      return false;
+    }
+
+    console.log('✅ Email sent successfully via Resend:', data?.id);
     return true;
   } catch (error) {
-    console.error('Failed to send email:', error);
+    console.error('❌ Email sending failed:', error);
     return false;
   }
 }

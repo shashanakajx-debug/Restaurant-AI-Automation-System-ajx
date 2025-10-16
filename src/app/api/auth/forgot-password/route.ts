@@ -1,3 +1,4 @@
+// src/app/api/auth/forgot-password/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongoose';
 import User from '@/models/User';
@@ -37,29 +38,35 @@ export async function POST(request: NextRequest) {
     // Save token to user
     user.resetToken = resetToken;
     user.resetTokenExpiry = resetTokenExpiry;
+
     await user.save();
 
     // Create reset URL
     const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?token=${resetToken}`;
 
     // Send email
-    const emailSent = await sendEmail({
-      to: email,
-      subject: 'Password Reset Request',
-      html: `
-        <h1>Password Reset</h1>
-        <p>You requested a password reset. Click the link below to reset your password:</p>
-        <a href="${resetUrl}">Reset Password</a>
-        <p>This link will expire in 1 hour.</p>
-        <p>If you didn't request this, please ignore this email.</p>
-      `
-    });
+    try {
+      const emailSent = await sendEmail({
+        to: email,
+        subject: 'Password Reset Request',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h1 style="color: #333;">Password Reset</h1>
+            <p style="color: #666; font-size: 16px;">You requested a password reset. Click the link below to reset your password:</p>
+            <a href="${resetUrl}" style="display: inline-block; padding: 12px 24px; background-color: #007bff; color: white; text-decoration: none; border-radius: 4px; margin: 20px 0;">Reset Password</a>
+            <p style="color: #666; font-size: 14px;">This link will expire in 1 hour.</p>
+            <p style="color: #999; font-size: 12px;">If you didn't request this, please ignore this email.</p>
+          </div>
+        `
+      });
 
-    if (!emailSent) {
-      return NextResponse.json(
-        createApiError('Failed to send reset email'),
-        { status: 500 }
-      );
+      if (!emailSent) {
+        console.error('Failed to send reset email');
+        // Still return success to prevent email enumeration
+      }
+    } catch (emailError) {
+      console.error('Email sending error:', emailError);
+      // Still return success to prevent email enumeration
     }
 
     return NextResponse.json(

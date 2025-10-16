@@ -1,3 +1,4 @@
+// src/app/(auth)/reset-password/page.tsx
 "use client";
 
 import { Suspense, useState, useEffect } from "react";
@@ -15,7 +16,6 @@ const resetPasswordSchema = z
     path: ["confirmPassword"],
   });
 
-// Separate component that uses useSearchParams
 function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -75,16 +75,29 @@ function ResetPasswordForm() {
 
     setIsLoading(true);
     try {
-      const res = await fetch("/api/reset-password", {
+      const res = await fetch("/api/auth/verify-reset-token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, password: formData.password }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to reset password");
+
+      // robust parsing: try JSON, fallback to text (so we don't crash on empty body)
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch (parseErr) {
+        const text = await res.text().catch(() => "");
+        data = text ? { message: text } : null;
+      }
+
+      if (!res.ok) {
+        // prefer error fields from API if present
+        const msg = data?.error || data?.message || `Request failed with status ${res.status}`;
+        throw new Error(msg);
+      }
 
       setSuccess(true);
-      // Optionally redirect to login after short delay
+      // redirect after a short delay so user can see success message
       setTimeout(() => router.push("/login"), 1500);
     } catch (err) {
       console.error("Password reset error:", err);
@@ -191,7 +204,6 @@ function ResetPasswordForm() {
   );
 }
 
-// Wrap with Suspense boundary
 export default function ResetPasswordPage() {
   return (
     <Suspense

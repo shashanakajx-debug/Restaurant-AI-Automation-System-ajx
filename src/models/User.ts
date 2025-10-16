@@ -29,6 +29,11 @@ export interface IUser extends Document {
   isActive: boolean;
   lastLogin?: Date;
   emailVerified: boolean;
+
+  // <-- ADD THESE TYPE DEFINITIONS HERE (interface only)
+  resetToken?: string;
+  resetTokenExpiry?: number;
+
   comparePassword(candidate: string): Promise<boolean>;
   toJSON(): any;
 }
@@ -62,6 +67,11 @@ const UserSchema = new Schema<IUser>({
     trim: true,
     match: [/^\+?[\d\s\-\(\)]{10,}$/, 'Please enter a valid phone number']
   },
+
+  // <-- ADD THESE SCHEMA FIELDS HERE (Mongoose schema)
+  resetToken: { type: String, default: null },
+  resetTokenExpiry: { type: Number, default: null },
+
   address: {
     street: { type: String, trim: true },
     city: { type: String, trim: true },
@@ -87,9 +97,6 @@ const UserSchema = new Schema<IUser>({
   timestamps: true,
   toJSON: { 
     transform: function(doc, ret) {
-      // Remove sensitive/internal fields safely
-      // Use object rest to avoid TypeScript errors about delete on non-optional properties
-      // Convert to any to allow returning a cleaned object
       const { password, __v, ...clean } = ret as any;
       return clean;
     }
@@ -97,8 +104,6 @@ const UserSchema = new Schema<IUser>({
 });
 
 // Indexes for better performance
-// Note: `email` is defined as `unique: true` in the schema above which creates
-// an index automatically. Avoid duplicating the same index definition.
 UserSchema.index({ role: 1 });
 UserSchema.index({ isActive: 1 });
 UserSchema.index({ createdAt: -1 });
