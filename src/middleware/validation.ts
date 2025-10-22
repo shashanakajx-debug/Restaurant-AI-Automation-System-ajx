@@ -42,11 +42,12 @@ export function withValidation<T>(
 
       return await handler(validatedRequest);
     } catch (error) {
-      if (error instanceof ZodError) {
-        const formattedErrors = error.errors.map(err => ({
-          field: err.path.join('.'),
-          message: err.message,
-          code: err.code,
+      if (error && typeof error === 'object' && 'issues' in error) {
+        const zErr = error as ZodError;
+        const formattedErrors = zErr.issues.map(issue => ({
+          field: issue.path.join('.'),
+          message: issue.message,
+          code: issue.code,
         }));
 
         return NextResponse.json(
@@ -59,7 +60,8 @@ export function withValidation<T>(
         );
       }
 
-      console.error('[Validation Middleware] Error:', error);
+  const logger = require('../lib/logger').default;
+  logger.error('[Validation Middleware] Error:', error);
       return NextResponse.json(
         { success: false, error: 'Invalid request format' },
         { status: 400 }
@@ -98,11 +100,12 @@ export function validateQuery<T>(schema: ZodSchema<T>) {
         return await handler(validatedRequest);
       } catch (error) {
         if (error instanceof ZodError) {
-          const formattedErrors = error.errors.map(err => ({
-            field: err.path.join('.'),
-            message: err.message,
-            code: err.code,
-          }));
+            const zErr = error as ZodError;
+            const formattedErrors = zErr.issues.map(issue => ({
+              field: issue.path.join('.'),
+              message: issue.message,
+              code: issue.code,
+            }));
 
           return NextResponse.json(
             {
@@ -114,7 +117,8 @@ export function validateQuery<T>(schema: ZodSchema<T>) {
           );
         }
 
-        console.error('[Query Validation Middleware] Error:', error);
+  const logger = require('../lib/logger').default;
+  logger.error('[Query Validation Middleware] Error:', error);
         return NextResponse.json(
           { success: false, error: 'Invalid query parameters' },
           { status: 400 }

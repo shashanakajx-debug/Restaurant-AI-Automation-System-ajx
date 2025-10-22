@@ -98,9 +98,10 @@ export const POST = withCorsAuthAndValidation(
       }
       
       // DEBUG logs: helps track shape if error occurs (you can remove later)
-      console.log('[AI Chat] session.constructor.name =', session?.constructor?.name);
-      console.log('[AI Chat] messages isArray =', Array.isArray(session?.messages), 'len =', session?.messages?.length ?? 'n/a');
-      console.log('[AI Chat] hasSaveMethod =', typeof session?.save === 'function');
+  const logger = require('@/lib/logger').default;
+  logger.debug('[AI Chat] session.constructor.name =', session?.constructor?.name);
+  logger.debug('[AI Chat] messages isArray =', Array.isArray(session?.messages), 'len =', session?.messages?.length ?? 'n/a');
+  logger.debug('[AI Chat] hasSaveMethod =', typeof session?.save === 'function');
 
   // Ensure messages is an array before pushing
   if (!Array.isArray(session.messages)) session.messages = [];
@@ -141,16 +142,16 @@ export const POST = withCorsAuthAndValidation(
       // Call AI wrapper with improved error handling
       let rawAiResp;
       try {
-        console.log('[AI Chat] Sending request to AI with messages count=', messagesForModel.length);
-        rawAiResp = await AI.chatWithAI({
+  logger.info('[AI Chat] Sending request to AI with messages count=', messagesForModel.length);
+  rawAiResp = await AI.chatWithAI({
           messages: messagesForModel as any,
           model: 'gpt-4o-mini',
           maxTokens: 800,
           // use lower temperature by default for consistent answers; lib default is 0.0
         });
-        console.log('[AI Chat] Received response from AI (truncated):', typeof rawAiResp === 'string' ? rawAiResp.substring(0, 100) : rawAiResp);
+  logger.info('[AI Chat] Received response from AI (truncated):', typeof rawAiResp === 'string' ? rawAiResp.substring(0, 100) : rawAiResp);
       } catch (aiErr) {
-        console.error('[AI Chat] AI service error:', aiErr);
+  logger.error('[AI Chat] AI service error:', aiErr);
         rawAiResp = null;
       }
 
@@ -177,7 +178,7 @@ export const POST = withCorsAuthAndValidation(
       try {
         await session.save();
       } catch (saveErr) {
-        console.error('[AI Chat] Failed to save session:', saveErr);
+  logger.error('[AI Chat] Failed to save session:', saveErr);
         // continue: still return AI response to user, but log DB error
       }
 

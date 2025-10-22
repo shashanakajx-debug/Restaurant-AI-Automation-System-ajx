@@ -31,10 +31,11 @@ export async function withAuth(
     }
 
     // Debug: log token summary to help diagnose permission issues in dev
-    try {
+      try {
       // Avoid logging sensitive full token in production
       const tokenSummary = { id: token.id, email: token.email, role: token.role };
-      console.log('[Auth Middleware] Token summary:', tokenSummary);
+      const logger = require('../lib/logger').default;
+      logger.info('[Auth Middleware] Token summary:', tokenSummary);
     } catch (e) {
       // ignore
     }
@@ -70,7 +71,8 @@ export async function withAuth(
 
     return await handler(authenticatedRequest);
   } catch (error) {
-    console.error('[Auth Middleware] Error:', error);
+    const logger = require('../lib/logger').default;
+    logger.error('[Auth Middleware] Error:', error);
     return NextResponse.json(
       { success: false, error: 'Authentication failed' },
       { status: 401 }

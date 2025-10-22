@@ -21,7 +21,8 @@ export const authOptions: NextAuthOptions = {
           try {
             await dbConnect();
           } catch (error) {
-            console.log('[Auth] Using mock database for authentication');
+              const logger = require('../../lib/logger').default;
+              logger.info('[Auth] Using mock database for authentication');
           }
           
           const email = credentials.email.trim().toLowerCase();
@@ -31,7 +32,8 @@ export const authOptions: NextAuthOptions = {
           try {
             user = await User.findOne({ email, isActive: true });
           } catch (error) {
-            console.error('[Auth] Error finding user:', error);
+              const logger = require('../../lib/logger').default;
+              logger.error('[Auth] Error finding user:', error);
             
             // Check if we're using mock database
             if (global.__mockDatabase) {
@@ -41,7 +43,8 @@ export const authOptions: NextAuthOptions = {
               
               // For development, if user is admin@example.com, create it in mock DB
               if (email === 'dev.admin@example.com' && users.length === 0) {
-                console.log('[Auth] Creating default admin user in mock database');
+                  const logger = require('../../lib/logger').default;
+                  logger.info('[Auth] Creating default admin user in mock database');
                 const hashedPassword = await bcrypt.hash('admin123', 12);
                 user = mockDb.addToCollection('users', {
                   email,
@@ -71,7 +74,8 @@ export const authOptions: NextAuthOptions = {
               valid = await bcrypt.compare(mockPassword, user.password);
             }
           } catch (error) {
-            console.error('[Auth] Password comparison error:', error);
+              const logger = require('../../lib/logger').default;
+              logger.error('[Auth] Password comparison error:', error);
             // For dev.admin@example.com in development, allow password 'admin123'
             if (process.env.NODE_ENV !== 'production' && 
                 email === 'dev.admin@example.com' && 
@@ -91,7 +95,8 @@ export const authOptions: NextAuthOptions = {
               global.__mockDatabase.updateInCollection('users', { email }, { lastLogin: new Date() });
             }
           } catch (error) {
-            console.error('[Auth] Error updating last login:', error);
+              const logger = require('../../lib/logger').default;
+              logger.error('[Auth] Error updating last login:', error);
           }
           
           return {
@@ -102,7 +107,8 @@ export const authOptions: NextAuthOptions = {
             image: null,
           } as any;
         } catch (error) {
-          console.error('[Auth] authorize error', error);
+            const logger = require('../../lib/logger').default;
+            logger.error('[Auth] authorize error', error);
           return null;
         }
       }
@@ -137,7 +143,8 @@ export const authOptions: NextAuthOptions = {
         }
         return true;
       } catch (error) {
-        console.error('[Auth] signIn error', error);
+          const logger = require('../../lib/logger').default;
+          logger.error('[Auth] signIn error', error);
         return false;
       }
     },

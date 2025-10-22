@@ -23,7 +23,8 @@ interface MenuItem {
 async function fetchMenu() {
   try {
     const url = getApiUrl('/api/menu');
-    console.log('Requesting URL:', url);  // Log the URL
+  const logger = require('@/lib/logger').default;
+  logger.debug('Requesting URL:', url);
 
     const res = await fetch(url, {
       next: { revalidate: 60 },

@@ -4,15 +4,15 @@ import User from '@/models/User';
 import bcrypt from 'bcryptjs';
 import { createApiResponse, createApiError } from '@/lib/utils/api';
 import { withAuth } from '@/middleware/auth';
+import logger from '@/lib/logger';
 
 // This endpoint creates an admin user for development purposes
 // Only accessible in development mode or by existing admins
 export async function GET(request: NextRequest) {
   // Prevent access in production unless by an admin
   if (process.env.NODE_ENV === 'production') {
-    return withAuth(async () => {
-      return setupAdminUser(request);
-    }, { requiredRole: 'admin' })(request);
+    // In production, require admin auth. withAuth takes (request, handler, requiredRole)
+    return withAuth(request, setupAdminUser, 'admin');
   }
   
   // In development, allow direct access
@@ -20,13 +20,14 @@ export async function GET(request: NextRequest) {
 }
 
 async function setupAdminUser(request: NextRequest) {
-  try {
-    // Try to connect to MongoDB
     try {
-      await dbConnect();
-    } catch (error) {
-      console.log('Using mock database instead');
-    }
+      // Try to connect to MongoDB
+      try {
+        await dbConnect();
+      } catch (error) {
+        const logger = require('../../../../lib/logger').default;
+        logger.info('Using mock database instead');
+      }
     
     const email = 'dev.admin@example.com';
     const password = 'admin123';
@@ -70,7 +71,7 @@ async function setupAdminUser(request: NextRequest) {
         });
       }
     } catch (dbError) {
-      console.error('Database operation failed, using mock data:', dbError);
+      logger.error('Database operation failed, using mock data:', dbError);
       
       // Use mock database as fallback
       const mockDb = global.__mockDatabase;
@@ -116,7 +117,7 @@ async function setupAdminUser(request: NextRequest) {
       }
     }
   } catch (error) {
-    console.error('Error creating admin user:', error);
+    logger.error('Error creating admin user:', error);
     return NextResponse.json({
       success: false,
       message: 'Failed to create admin user',

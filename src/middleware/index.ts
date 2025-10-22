@@ -6,7 +6,7 @@ export * from './cors';
 
 // Combined middleware helpers
 import { withAuth, AuthenticatedRequest } from './auth';
-import { withValidation, ValidatedRequest } from './validation';
+import { withValidation, validateQuery, ValidatedRequest } from './validation';
 import { rateLimit } from './rateLimit';
 import { withCors } from './cors';
 import { ZodSchema } from 'zod';
@@ -56,18 +56,22 @@ export function withCorsAuthAndValidation<T>(
   return (handler: (req: AuthenticatedRequest & ValidatedRequest<T>) => Promise<NextResponse>) => {
     // Always skip authentication and just use validation for all routes
     return withCors(corsConfig)(
-      withValidation(schema, (validReq) => {
-        // Create a combined request with mock user data
-        const combinedReq = { 
-          ...validReq, 
-          user: {
-            id: 'guest-user',
-            email: 'guest@example.com',
-            name: 'Guest User',
-            role: 'customer'
-          } 
-        } as AuthenticatedRequest & ValidatedRequest<T>;
-        return handler(combinedReq);
+      // For GET requests, validate query params; for others, validate body
+      (async (request: NextRequest) => {
+        const method = request.method?.toUpperCase?.() || 'GET';
+        const validator = method === 'GET' ? validateQuery(schema) : withValidation(schema);
+        return validator((validReq) => {
+          const combinedReq = {
+            ...validReq,
+            user: {
+              id: 'guest-user',
+              email: 'guest@example.com',
+              name: 'Guest User',
+              role: 'customer',
+            },
+          } as AuthenticatedRequest & ValidatedRequest<T>;
+          return handler(combinedReq);
+        })(request as any);
       })
     );
   };

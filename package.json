@@ -26,8 +26,11 @@
   "homepage": "https://github.com/shashanakajx-debug/Restaurant-AI-Automation-System-ajx#readme",
   "dependencies": {
     "@heroicons/react": "^2.2.0",
+    "@radix-ui/react-slot": "^1.2.3",
     "bcrypt": "^5.1.0",
     "bcryptjs": "^3.0.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.546.0",
@@ -40,6 +43,8 @@
     "react-dom": "^18.2.0",
     "resend": "^6.1.3",
     "stripe": "^19.1.0",
+    "tailwind-merge": "^3.3.1",
+    "tailwindcss-animate": "^1.0.7",
     "zod": "^4.1.12",
     "zustand": "^5.0.8"
   },

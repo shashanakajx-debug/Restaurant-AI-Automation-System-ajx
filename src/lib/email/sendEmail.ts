@@ -13,12 +13,13 @@ export async function sendEmail({ to, subject, html }: EmailOptions): Promise<bo
   try {
     // In development without API key, log to console
     if (!process.env.RESEND_API_KEY) {
-      console.log('=================== EMAIL (DEV MODE - NO API KEY) ===================');
-      console.log('To:', to);
-      console.log('Subject:', subject);
-      console.log('Content:', html);
-      console.log('=====================================================================');
-      console.log('⚠️  Set RESEND_API_KEY in .env.local to send real emails');
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const logger = require('../logger').default;
+      logger.info('EMAIL (DEV MODE - NO API KEY)');
+      logger.debug('To:', to);
+      logger.debug('Subject:', subject);
+      logger.debug('Content:', html);
+      logger.warn('Set RESEND_API_KEY in .env.local to send real emails');
       return true;
     }
 
@@ -30,11 +31,13 @@ export async function sendEmail({ to, subject, html }: EmailOptions): Promise<bo
     });
 
     if (error) {
-      console.error('❌ Resend error:', error);
+      const logger = require('../logger').default;
+      logger.error('Resend error:', error);
       return false;
     }
 
-    console.log('✅ Email sent successfully via Resend:', data?.id);
+    const logger = require('../logger').default;
+    logger.info('Email sent successfully via Resend:', data?.id);
     return true;
   } catch (error) {
     console.error('❌ Email sending failed:', error);

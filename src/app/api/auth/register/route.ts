@@ -10,12 +10,13 @@ export const POST = withCors({ origin: true, methods: ['POST'], credentials: fal
     registerSchema,
     rateLimits.general(async (request: NextRequest) => {
       try {
-        console.log('[Auth API] Starting registration process');
+  const logger = require('@/lib/logger').default;
+  logger.info('[Auth API] Starting registration process');
 
         // Ensure database connection
         try {
           await dbConnect();
-          console.log('[Auth API] Database connected successfully');
+          logger.info('[Auth API] Database connected successfully');
         } catch (dbError) {
           console.error('[Auth API] Database connection error:', dbError);
           return NextResponse.json(
@@ -26,12 +27,12 @@ export const POST = withCors({ origin: true, methods: ['POST'], credentials: fal
 
         // Get validated data from middleware
         const { email, password, name, role = 'customer' } = (request as any).validatedData;
-        console.log('[Auth API] Processing registration for email:', email);
+  logger.info('[Auth API] Processing registration for email:', email);
 
         // Check if user already exists
         const existingUser = await User.findOne({ email });
         if (existingUser) {
-          console.log('[Auth API] User already exists with email:', email);
+          logger.info('[Auth API] User already exists with email:', email);
           return NextResponse.json(
             createApiError('User with this email already exists'),
             { status: 409 }
@@ -50,9 +51,9 @@ export const POST = withCors({ origin: true, methods: ['POST'], credentials: fal
 
         // Save user with better error handling
         try {
-          console.log('[Auth API] Attempting to save new user');
+          logger.info('[Auth API] Attempting to save new user');
           await user.save();
-          console.log('[Auth API] User saved successfully');
+          logger.info('[Auth API] User saved successfully');
         } catch (saveError: any) {
           console.error('[Auth API] User save error:', saveError);
 
@@ -98,13 +99,14 @@ export const POST = withCors({ origin: true, methods: ['POST'], credentials: fal
           createdAt: (user as any).createdAt,
         };
 
-        console.log('[Auth API] Registration successful for:', email);
+  logger.info('[Auth API] Registration successful for:', email);
         return NextResponse.json(
           createApiResponse(userResponse, 'User registered successfully'),
           { status: 201 }
         );
       } catch (error) {
-        console.error('[Auth API] Registration error:', error);
+        const logger = require('@/lib/logger').default;
+        logger.error('[Auth API] Registration error:', error);
         // Provide more specific error message if possible
         const errorMessage = error instanceof Error ? error.message : 'Failed to register user';
         return NextResponse.json(

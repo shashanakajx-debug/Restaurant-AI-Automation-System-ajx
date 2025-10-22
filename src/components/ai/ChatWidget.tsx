@@ -1,6 +1,8 @@
 "use client"
 import { useEffect, useRef, useState } from 'react'
 import { ChatBubbleLeftRightIcon, PaperAirplaneIcon, XMarkIcon, AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline'
+import { useRouter } from 'next/navigation'
+import { useCart } from '@/lib/hooks/useCart'
 
 type Message = {
   role: 'user' | 'assistant';
@@ -36,6 +38,8 @@ type ApiResponse<T = any> = {
 export default function ChatWidget() {
   // Mock session data to avoid requiring SessionProvider (typed loosely)
   const session: any | null = null
+  const router = useRouter()
+  const { addItem } = useCart()
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -235,6 +239,14 @@ export default function ChatWidget() {
     setTimeout(() => send(), 100)
   }
 
+  // Add recommended item to cart and navigate to cart
+  function addRecommendationToCart(item: Recommendation) {
+    const price = typeof item.price === 'number' ? item.price : 0
+    const id = item.menuItemId || item.name
+    addItem({ id, name: item.name, price, quantity: 1, imageUrl: item.imageUrl || undefined })
+    router.push('/cart')
+  }
+
   return (
     <div className="fixed right-4 bottom-4 z-[100]">
       {open && (
@@ -306,15 +318,24 @@ export default function ChatWidget() {
             {recommendations.length > 0 && !loading && (
               <div className="mt-4 space-y-2">
                 <p className="text-xs text-gray-500 dark:text-gray-400">Recommended items:</p>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-col gap-2">
                   {recommendations.map((item, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => askAboutItem(item)}
-                      className="text-xs bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-full px-3 py-1 text-gray-800 dark:text-gray-200"
-                    >
-                      {item.name} (${item.price})
-                    </button>
+                    <div key={idx} className="flex items-center justify-between gap-2 bg-gray-50 dark:bg-gray-700/40 rounded-md px-2 py-1.5">
+                      <button
+                        onClick={() => askAboutItem(item)}
+                        className="text-xs text-left flex-1 hover:underline text-gray-800 dark:text-gray-200"
+                        title="Ask about this item"
+                      >
+                        {item.name} {typeof item.price === 'number' ? `( $${item.price} )` : ''}
+                      </button>
+                      <button
+                        onClick={() => addRecommendationToCart(item)}
+                        className="text-xs bg-primary text-white rounded-full px-3 py-1 hover:bg-primary/90"
+                        title="Add to cart"
+                      >
+                        Add
+                      </button>
+                    </div>
                   ))}
                 </div>
               </div>

@@ -105,20 +105,26 @@ async function dbConnect(): Promise<typeof mongoose> {
 
   // If MongoDB URI isn't provided, fall back to the mock database
   if (!MONGODB_URI || MONGODB_URI === 'mongodb://localhost:27017/restaurant-ai') {
-    console.warn('Using mock database because MONGODB_URI is not provided or is default');
+    const logger = require('./logger').default;
+    logger.warn('Using mock database because MONGODB_URI is not provided or is default');
+    setupMockModels();
     return mongoose;
   }
 
   const connectionPromise = mongoose.connect(MONGODB_URI, mongooseOptions)
     .then((mongoose) => {
-      console.log('MongoDB connected successfully');
-      return mongoose;
-    })
+        // Use logger to control output verbosity
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const logger = require('./logger').default;
+        logger.info('MongoDB connected successfully');
+        return mongoose;
+      })
     .catch((err) => {
-      console.error('MongoDB connection error:', err);
-      global.__mongoose = { conn: null, promise: null };
-      throw err;
-    });
+        const logger = require('./logger').default;
+        logger.error('MongoDB connection error:', err);
+        global.__mongoose = { conn: null, promise: null };
+        throw err;
+      });
 
   global.__mongoose = { conn: null, promise: connectionPromise };
 
@@ -133,45 +139,60 @@ async function dbConnect(): Promise<typeof mongoose> {
 
 // Setup mock models to simulate Mongoose behavior when DB is unavailable
 function setupMockModels() {
-  // Define a mock model object with common Mongoose methods
-  const mockModelObj = {
-    findOne: (query: any) => {
-      const results = global.__mockDatabase.findInCollection('users', query);
-      const result = results[0] || null;
-      return {
-        lean: () => Promise.resolve(result),
-        exec: () => Promise.resolve(result),
-      };
-    },
-    find: (query: any = {}) => {
-      const results = global.__mockDatabase.findInCollection('users', query);
-      return {
-        lean: () => Promise.resolve(results),
-        exec: () => Promise.resolve(results),
-      };
-    },
-    create: (doc: any) => {
-      return Promise.resolve(global.__mockDatabase.addToCollection('users', doc));
-    },
-    updateOne: (query: any, update: any) => {
-      const result = global.__mockDatabase.updateInCollection('users', query, update);
-      return Promise.resolve({ modifiedCount: result ? 1 : 0 });
-    },
-  };
+  function getCollectionName(modelName: string): string {
+    const lower = modelName.toLowerCase();
+    // naive pluralization; good enough for mock usage
+    if (lower.endsWith('s')) return lower;
+    return `${lower}s`;
+  }
 
-  // Overriding mongoose.model to return the mock model for testing
+  function createMockModel(collectionName: string) {
+    return {
+      findOne: (query: any) => {
+        const results = global.__mockDatabase.findInCollection(collectionName, query);
+        const result = results[0] || null;
+        return {
+          lean: () => Promise.resolve(result),
+          exec: () => Promise.resolve(result),
+        };
+      },
+      find: (query: any = {}) => {
+        const results = global.__mockDatabase.findInCollection(collectionName, query);
+        return {
+          lean: () => Promise.resolve(results),
+          exec: () => Promise.resolve(results),
+          sort: () => ({
+            skip: () => ({
+              limit: () => ({ lean: () => Promise.resolve(results) }),
+            }),
+          }),
+        };
+      },
+      countDocuments: (query: any = {}) => {
+        const results = global.__mockDatabase.findInCollection(collectionName, query);
+        return Promise.resolve(results.length);
+      },
+      create: (doc: any) => Promise.resolve(global.__mockDatabase.addToCollection(collectionName, doc)),
+      updateOne: (query: any, update: any) => {
+        const result = global.__mockDatabase.updateInCollection(collectionName, query, update);
+        return Promise.resolve({ modifiedCount: result ? 1 : 0 });
+      },
+      // For new Model(); model.save()
+      prototype: {
+        save: function () { return Promise.resolve(this); },
+      },
+    } as any;
+  }
+
+  // Override mongoose.model to return collection-aware mock
+  const originalModel = mongoose.model.bind(mongoose);
   mongoose.model = function mockModel(name: string, schema?: any): Model<Document> {
-    // If schema is provided, this would normally create a Mongoose model, 
-    // but in mock mode we simply return a mock object.
-    if (!schema) {
-      return mockModelObj as any; // Return mock model object
-    }
+    const collection = getCollectionName(name);
+    return createMockModel(collection) as any;
+  } as any;
 
-    // If schema is provided (which we ignore in the mock), just return the mock object
-    return mockModelObj as any;
-  };
-
-  console.log('Using mock database for development');
+  const logger = require('./logger').default;
+  logger.info('Using mock database for development');
 }
 
 // Initialize mock database with some sample data for testing
@@ -180,7 +201,8 @@ function initializeMockData() {
 
   // Sample menu items (mock data for testing)
   if (mockDb.getCollection('menuitems').length === 0) {
-    console.log('Adding sample menu items to mock database');
+    const logger = require('./logger').default;
+    logger.info('Adding sample menu items to mock database');
     const sampleMenuItems = [
       { 
         _id: '1', 
@@ -221,7 +243,8 @@ function initializeMockData() {
 
   // Add sample admin user if not exists
   if (mockDb.getCollection('users').length === 0) {
-    console.log('Adding sample admin user to mock database');
+    const logger = require('./logger').default;
+    logger.info('Adding sample admin user to mock database');
     mockDb.addToCollection('users', {
       _id: 'admin1',
       email: 'dev.admin@example.com',

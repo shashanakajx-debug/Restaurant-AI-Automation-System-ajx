@@ -37,15 +37,14 @@ export default function RegisterPage() {
       registerSchema.parse(formData);
       setFormErrors({});
       return true;
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        const errors: Record<string, string> = {};
-        error.errors.forEach((err) => {
-          if (err.path[0]) {
-            errors[err.path[0] as string] = err.message;
-          }
-        });
-        setFormErrors(errors);
+    } catch (error: unknown) {
+        if (error instanceof z.ZodError) {
+          const errors: Record<string, string> = {};
+          error.issues.forEach((issue) => {
+            const key = issue.path && issue.path.length ? String(issue.path[0]) : undefined;
+            if (key) errors[key] = issue.message;
+          });
+          setFormErrors(errors);
       }
       return false;
     }
@@ -62,7 +61,8 @@ export default function RegisterPage() {
     setIsLoading(true);
     
     try {
-      console.log('Registration data:', formData);
+  // client-side debug - keep console for developer UX in browser
+  console.debug('Registration data:', formData);
       
       // Register the user
       const response = await fetch('/api/auth/register', {
@@ -72,21 +72,21 @@ export default function RegisterPage() {
       });
       
       const data = await response.json();
-      console.log('Registration response:', data);
+  console.debug('Registration response:', data);
       
       if (!response.ok) {
         throw new Error(data.error || 'Failed to register');
       }
       
       // Sign in the user after successful registration
-      console.log('Registration successful, attempting sign in');
+  console.debug('Registration successful, attempting sign in');
       const signInResult = await signIn('credentials', {
         email: formData.email,
         password: formData.password,
         redirect: false,
       });
       
-      console.log('Sign in result:', signInResult);
+  console.debug('Sign in result:', signInResult);
       
       if (signInResult?.error) {
         throw new Error(signInResult.error);

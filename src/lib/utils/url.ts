@@ -1,8 +1,16 @@
 export function getApiUrl(path: string): string {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3004'
-  return new URL(path, baseUrl).toString()
+  const envBase = process.env.NEXT_PUBLIC_APP_URL
+  if (typeof window !== 'undefined') {
+    // Use current origin in browser for same-origin API calls
+    return new URL(path, window.location.origin).toString()
+  }
+  // On server, prefer configured base URL; fall back to relative path
+  return envBase ? new URL(path, envBase).toString() : path
 }
 
 export function getBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3004'
+  if (typeof window !== 'undefined') {
+    return window.location.origin
+  }
+  return process.env.NEXT_PUBLIC_APP_URL || ''
 }

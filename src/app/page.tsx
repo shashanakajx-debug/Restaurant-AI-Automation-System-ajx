@@ -10,7 +10,7 @@ export default function Page() {
 				<p className="text-sm md:text-base text-gray-50 mb-4">Smart ordering, real-time recommendations, and intelligent management — powered by AI.</p>
           
           <div className="flex flex-wrap gap-6">
-              <a href="/menu" className=" bg-transparent hover:bg-yellow-300 text-yellow-300 hover:text-black rounded shadow hover:shadow-lg py-2 px-4 border border-yellow-300 hover:border-transparent">Explore Menu</a>
+              <a href="/food-menu" className=" bg-transparent hover:bg-yellow-300 text-yellow-300 hover:text-black rounded shadow hover:shadow-lg py-2 px-4 border border-yellow-300 hover:border-transparent">Explore Menu</a>
           <a href="/reservations" className="bg-transparent hover:bg-yellow-300 text-yellow-300 hover:text-black rounded shadow hover:shadow-lg py-2 px-4 border border-yellow-300 hover:border-transparent">Book a Table</a>
 			</div></div>
 

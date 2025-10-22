@@ -17,7 +17,8 @@ export class StorageHelper {
       }
       return JSON.parse(item);
     } catch (error) {
-      console.error(`Error reading from storage:`, error);
+  const logger = require('../logger').default;
+  logger.error(`Error reading from storage:`, error);
       return defaultValue || null;
     }
   }
@@ -26,7 +27,8 @@ export class StorageHelper {
     try {
       this.storage.setItem(key, JSON.stringify(value));
     } catch (error) {
-      console.error(`Error writing to storage:`, error);
+  const logger = require('../logger').default;
+  logger.error(`Error writing to storage:`, error);
     }
   }
   
@@ -34,7 +36,8 @@ export class StorageHelper {
     try {
       this.storage.removeItem(key);
     } catch (error) {
-      console.error(`Error removing from storage:`, error);
+  const logger = require('../logger').default;
+  logger.error(`Error removing from storage:`, error);
     }
   }
   
@@ -42,7 +45,8 @@ export class StorageHelper {
     try {
       this.storage.clear();
     } catch (error) {
-      console.error(`Error clearing storage:`, error);
+  const logger = require('../logger').default;
+  logger.error(`Error clearing storage:`, error);
     }
   }
   

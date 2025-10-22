@@ -13,18 +13,21 @@ function getOpenAIClient() {
   // Support both OPENAI_API_KEY and a generic LLM_API_KEY fallback
   const apiKey = process.env.OPENAI_API_KEY || process.env.LLM_API_KEY;
   if (!apiKey) {
-    console.error('OPENAI_API_KEY / LLM_API_KEY is not configured in environment');
+    const logger = require('./logger').default;
+    logger.error('OPENAI_API_KEY / LLM_API_KEY is not configured in environment');
     throw new Error('OpenAI API key is missing. Please check your environment configuration.');
   }
 
   if (!process.env.OPENAI_API_KEY && process.env.LLM_API_KEY) {
-    console.warn('Using LLM_API_KEY as fallback for OpenAI client. Consider renaming to OPENAI_API_KEY for clarity.');
+    const logger = require('./logger').default;
+    logger.warn('Using LLM_API_KEY as fallback for OpenAI client. Consider renaming to OPENAI_API_KEY for clarity.');
   }
 
   try {
     return new OpenAI({ apiKey });
   } catch (error) {
-    console.error('Failed to initialize OpenAI client:', error);
+    const logger = require('./logger').default;
+    logger.error('Failed to initialize OpenAI client:', error);
     throw new Error('Failed to initialize AI service. Please try again later.');
   }
 }
@@ -53,7 +56,8 @@ export async function chatWithAI({
     try {
       const client = getOpenAIClient();
 
-      console.log(`[AI Chat] Sending request to OpenAI with ${messages.length} messages (model=${model}, temp=${temperature})`);
+  const logger = require('./logger').default;
+  logger.info(`[AI Chat] Sending request to OpenAI with ${messages.length} messages (model=${model}, temp=${temperature})`);
 
       // Use the Chat Completions API shape expected by openai v4
       const resp = await client.chat.completions.create({
@@ -67,15 +71,16 @@ export async function chatWithAI({
       const content = (resp as any)?.choices?.[0]?.message?.content || (resp as any)?.choices?.[0]?.text || null;
 
       if (!content) {
-        console.warn('[AI Chat] Received empty response from OpenAI');
+        logger.warn('[AI Chat] Received empty response from OpenAI');
       } else {
-        console.log(`[AI Chat] Received response of length ${content.length}`);
+        logger.info(`[AI Chat] Received response of length ${content.length}`);
       }
 
       return content || null;
     } catch (error: any) {
       lastError = error;
-      console.error(`[AI Chat] Attempt ${attempts + 1}/${retries + 1} failed:`, error?.message || error);
+      const logger = require('./logger').default;
+      logger.error(`[AI Chat] Attempt ${attempts + 1}/${retries + 1} failed:`, error?.message || error);
       attempts++;
 
       // Wait before retrying (exponential backoff)
@@ -87,7 +92,8 @@ export async function chatWithAI({
   }
 
   // All retries failed - return null so caller can fallback gracefully
-  console.error('[AI Chat] All attempts failed:', lastError);
+  const logger = require('./logger').default;
+  logger.error('[AI Chat] All attempts failed:', lastError);
   return null;
 }
 

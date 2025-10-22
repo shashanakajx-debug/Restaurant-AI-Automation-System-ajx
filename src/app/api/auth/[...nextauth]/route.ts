@@ -4,6 +4,7 @@ import GoogleProvider from 'next-auth/providers/google'
 import dbConnect from '@/lib/mongoose'
 import User from '@/models/User'
 import { UserRole } from '@/types/user'
+const logger = require('@/lib/logger').default;
 
 const options: NextAuthOptions = {
   providers: [
@@ -42,7 +43,7 @@ const options: NextAuthOptions = {
             image: null,
           }
         } catch (err) {
-          console.error('[Auth] Authorization error:', err)
+          logger.error('[Auth] Authorization error:', err)
           return null
         }
       },
@@ -79,7 +80,7 @@ const options: NextAuthOptions = {
         }
         return true
       } catch (err) {
-        console.error('[Auth] SignIn error:', err)
+        logger.error('[Auth] SignIn error:', err)
         return false
       }
     },
@@ -106,10 +107,11 @@ const options: NextAuthOptions = {
 
   events: {
     async signIn({ user }) {
-      console.log(`[Auth] User signed in: ${user.email}`)
+    const logger = require('@/lib/logger').default;
+    logger.info(`[Auth] User signed in: ${user.email}`)
     },
     async signOut({ session }) {
-      console.log(`[Auth] User signed out: ${session?.user?.email}`)
+    logger.info(`[Auth] User signed out: ${session?.user?.email}`)
     },
   },
 
