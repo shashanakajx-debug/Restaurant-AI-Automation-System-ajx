@@ -2,16 +2,12 @@
   "name": "restaurant-ai-automation-system-first-copy",
   "version": "1.0.0",
   "description": "A comprehensive AI-powered restaurant management and customer experience platform built with Next.js, TypeScript, and modern web technologies.",
-  "main": "cypress.config.js",
-  "directories": {
-    "doc": "docs",
-    "test": "tests"
-  },
+  "main": "index.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest"
   },
   "repository": {
     "type": "git",

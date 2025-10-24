@@ -6,15 +6,15 @@ export interface ValidatedRequest<T = any> extends NextRequest {
 }
 
 export function withValidation<T>(
-  schema: ZodSchema<T>,
-  handler: (req: ValidatedRequest<T>) => Promise<NextResponse>
+  schema: ZodSchema<T>
 ) {
-  return async (request: NextRequest): Promise<NextResponse> => {
-    try {
-      let data: any;
+  return (handler: (req: ValidatedRequest<T>) => Promise<NextResponse>) => {
+    return async (request: NextRequest): Promise<NextResponse> => {
+      try {
+        let data: any;
 
-      // Parse request body based on content type
-      const contentType = request.headers.get('content-type');
+        // Parse request body based on content type
+        const contentType = request.headers.get('content-type');
       
       if (contentType?.includes('application/json')) {
         data = await request.json();
@@ -36,43 +36,44 @@ export function withValidation<T>(
       // Validate data with schema
       const validatedData = schema.parse(data);
 
-      // Add validated data to request
-      const validatedRequest = request as ValidatedRequest<T>;
-      validatedRequest.validatedData = validatedData;
+        // Add validated data to request
+        const validatedRequest = request as ValidatedRequest<T>;
+        validatedRequest.validatedData = validatedData;
 
-      return await handler(validatedRequest);
-    } catch (error) {
-      if (error && typeof error === 'object' && 'issues' in error) {
-        const zErr = error as ZodError;
-        const formattedErrors = zErr.issues.map(issue => ({
-          field: issue.path.join('.'),
-          message: issue.message,
-          code: issue.code,
-        }));
+        return await handler(validatedRequest);
+      } catch (error) {
+        if (error && typeof error === 'object' && 'issues' in error) {
+          const zErr = error as ZodError;
+          const formattedErrors = zErr.issues.map(issue => ({
+            field: issue.path.join('.'),
+            message: issue.message,
+            code: issue.code,
+          }));
 
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'Validation failed',
+              details: formattedErrors,
+            },
+            { status: 400 }
+          );
+        }
+
+        const logger = require('../lib/logger').default;
+        logger.error('[Validation Middleware] Error:', error);
         return NextResponse.json(
-          {
-            success: false,
-            error: 'Validation failed',
-            details: formattedErrors,
-          },
+          { success: false, error: 'Invalid request format' },
           { status: 400 }
         );
       }
-
-  const logger = require('../lib/logger').default;
-  logger.error('[Validation Middleware] Error:', error);
-      return NextResponse.json(
-        { success: false, error: 'Invalid request format' },
-        { status: 400 }
-      );
-    }
+    };
   };
 }
 
 export function validateBody<T>(schema: ZodSchema<T>) {
   return (handler: (req: ValidatedRequest<T>) => Promise<NextResponse>) => {
-    return withValidation(schema, handler);
+    return withValidation(schema)(handler);
   };
 }
 
