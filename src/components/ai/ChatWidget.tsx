@@ -1,6 +1,16 @@
 "use client"
 import { useEffect, useRef, useState } from 'react'
-import { ChatBubbleLeftRightIcon, PaperAirplaneIcon, XMarkIcon, AdjustmentsHorizontalIcon } from '@heroicons/react/24/outline'
+import { 
+  ChatBubbleLeftRightIcon, 
+  PaperAirplaneIcon, 
+  XMarkIcon, 
+  AdjustmentsHorizontalIcon,
+  UserIcon,
+  SparklesIcon,
+  ShoppingCartIcon,
+  TrashIcon,
+  InformationCircleIcon
+} from '@heroicons/react/24/outline'
 import { useRouter } from 'next/navigation'
 import { useCart } from '@/lib/hooks/useCart'
 
@@ -27,7 +37,6 @@ type UserPreference = {
   budget?: number;
 }
 
-// Minimal API response typing used by many routes
 type ApiResponse<T = any> = {
   success?: boolean;
   data?: T;
@@ -35,8 +44,15 @@ type ApiResponse<T = any> = {
   error?: string;
 };
 
+// Quick prompts for users to get started
+const QUICK_PROMPTS = [
+  "What are today's specials?",
+  "Recommend vegetarian options",
+  "What's popular?",
+  "Help me choose a main course"
+];
+
 export default function ChatWidget() {
-  // Mock session data to avoid requiring SessionProvider (typed loosely)
   const session: any | null = null
   const router = useRouter()
   const { addItem } = useCart()
@@ -44,7 +60,6 @@ export default function ChatWidget() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [retrying, setRetrying] = useState(false)
   const [sessionId, setSessionId] = useState<string | undefined>(undefined)
   const [messages, setMessages] = useState<Message[]>([])
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
@@ -57,13 +72,13 @@ export default function ChatWidget() {
   })
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Load session from localStorage
+  // Load session and messages
   useEffect(() => {
     const id = window.localStorage.getItem('ai_session_id') || undefined
     setSessionId(id || undefined)
     
-    // Load saved messages if they exist
     const savedMessages = window.localStorage.getItem('ai_chat_messages')
     if (savedMessages) {
       try {
@@ -77,31 +92,30 @@ export default function ChatWidget() {
     }
   }, [])
 
-  // Auto-scroll to bottom when messages change
+  // Auto-scroll to bottom
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
-  }, [messages, open])
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, loading, recommendations])
 
   // Focus input when chat opens
   useEffect(() => {
     if (open) {
       setTimeout(() => {
         inputRef.current?.focus()
-      }, 100)
+      }, 300)
     }
   }, [open])
 
-  // Save messages to localStorage when they change
+  // Save messages to localStorage
   useEffect(() => {
     if (messages.length > 0) {
-      window.localStorage.setItem('ai_chat_messages', JSON.stringify(messages.slice(-20))) // Keep last 20 messages
+      window.localStorage.setItem('ai_chat_messages', JSON.stringify(messages.slice(-20)))
     }
   }, [messages])
 
-  // Load user preferences from session if available
+  // Fetch user preferences
   useEffect(() => {
     if (session?.user) {
-      // Try to load preferences from localStorage first
       const savedPrefs = window.localStorage.getItem('user_ai_preferences')
       if (savedPrefs) {
         try {
@@ -110,13 +124,11 @@ export default function ChatWidget() {
           console.error('Failed to parse saved preferences', e)
         }
       } else {
-        // If not in localStorage, try to fetch from API
         fetchUserPreferences()
       }
     }
   }, [session])
 
-  // Fetch user preferences from API
   async function fetchUserPreferences() {
     if (!session?.user) return
     
@@ -132,8 +144,6 @@ export default function ChatWidget() {
           spiceLevel: prefs.spiceLevel || 'medium',
           budget: prefs.budget || 0
         })
-        
-        // Save to localStorage for faster access next time
         window.localStorage.setItem('user_ai_preferences', JSON.stringify(prefs))
       }
     } catch (e) {
@@ -141,7 +151,6 @@ export default function ChatWidget() {
     }
   }
 
-  // Save preferences to localStorage and API
   async function savePreferences() {
     window.localStorage.setItem('user_ai_preferences', JSON.stringify(userPreferences))
     
@@ -156,29 +165,29 @@ export default function ChatWidget() {
         console.error('Failed to save preferences to API', e)
       }
     }
-    
     setShowPreferences(false)
   }
 
-  // Send message to API
-  async function send() {
-    if (!input.trim()) return
+  async function send(message?: string) {
+    const messageToSend = message || input.trim()
+    if (!messageToSend) return
+
     const userMsg: Message = { 
       role: 'user', 
-      content: input,
+      content: messageToSend,
       timestamp: new Date().toISOString()
     }
     setMessages(prev => [...prev, userMsg])
     setInput('')
     setLoading(true)
+    setError(null)
     
     try {
-      console.log('Sending message to API:', userMsg.content);
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          message: userMsg.content, 
+          message: messageToSend, 
           sessionId,
           context: {
             currentPage: window.location.pathname,
@@ -188,21 +197,19 @@ export default function ChatWidget() {
         })
       })
       
-  const raw = await res.json();
-  const data = raw as ApiResponse<any>;
-  console.log('Received response from API:', data);
-
-  // Normalize different possible API shapes
-  const payload = (data.data ?? raw ?? {}) as any;
+      const raw = await res.json();
+      const data = raw as ApiResponse<any>;
+      const payload = (data.data ?? raw ?? {}) as any;
 
       if (payload?.sessionId && payload.sessionId !== sessionId) {
         setSessionId(payload.sessionId)
         window.localStorage.setItem('ai_session_id', payload.sessionId)
       }
 
-  const reply = (typeof payload?.message === 'string' && payload.message) || (typeof data?.message === 'string' && data.message) || 'Sorry, I am currently unavailable. Please try again later.';
+      const reply = (typeof payload?.message === 'string' && payload.message) || 
+                   (typeof data?.message === 'string' && data.message) || 
+                   'Sorry, I am currently unavailable. Please try again later.';
 
-      // Save any recommendations (defensive)
       if (Array.isArray(payload?.recommendations)) {
         setRecommendations(payload.recommendations as Recommendation[])
       } else if (Array.isArray((raw as any)?.recommendations)) {
@@ -216,9 +223,10 @@ export default function ChatWidget() {
       }])
     } catch (e) {
       console.error('Chat API error:', e)
+      setError('Connection failed. Please check your internet connection.')
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: 'There was an error connecting to the server. Please try again.',
+        content: 'I apologize, but I\'m having trouble connecting right now. Please try again in a moment.',
         timestamp: new Date().toISOString()
       }])
     } finally {
@@ -226,20 +234,17 @@ export default function ChatWidget() {
     }
   }
 
-  // Clear chat history
   function clearChat() {
     setMessages([])
+    setRecommendations([])
     window.localStorage.removeItem('ai_chat_messages')
-    // Keep the session ID
   }
 
-  // Add a recommendation to the chat
   function askAboutItem(item: Recommendation) {
     setInput(`Tell me more about ${item.name}`)
     setTimeout(() => send(), 100)
   }
 
-  // Add recommended item to cart and navigate to cart
   function addRecommendationToCart(item: Recommendation) {
     const price = typeof item.price === 'number' ? item.price : 0
     const id = item.menuItemId || item.name
@@ -248,54 +253,96 @@ export default function ChatWidget() {
   }
 
   return (
-    <div className="fixed right-4 bottom-4 z-[100]">
+    <div className="fixed right-4 bottom-4 z-50 md:right-6 md:bottom-6">
+      {/* Chat Window */}
       {open && (
-        <div className="card w-96 h-[500px] mb-3 flex flex-col shadow-lg bg-white dark:bg-gray-800 rounded-lg overflow-hidden">
-          <div className="px-4 py-3 border-b flex items-center justify-between bg-primary/10">
-            <div className="flex items-center gap-2">
-              <ChatBubbleLeftRightIcon className="w-5 h-5 text-primary" />
-              <h3 className="font-medium">Restaurant Assistant</h3>
+        <div className="flex flex-col mb-3 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 w-[calc(100vw-2rem)] md:w-96 h-[85vh] max-h-[600px] overflow-hidden">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-primary to-primary/90 px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                  <SparklesIcon className="w-6 h-6 text-white" />
+                </div>
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 border-2 border-white rounded-full"></div>
+              </div>
+              <div>
+                <h3 className="font-semibold text-white">Restaurant Assistant</h3>
+                <p className="text-xs text-white/80">Online • Ready to help</p>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <button 
-                onClick={clearChat} 
-                className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                title="Clear chat history"
+                onClick={clearChat}
+                className="p-2 text-red-500 hover:text-red-700 transition-colors hover:bg-red-100 rounded-lg"
+                title="Clear conversation"
               >
-                Clear
+                <TrashIcon className="w-4 h-4" />
               </button>
               <button 
                 onClick={() => setOpen(false)}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                className="p-2 text-red-500 hover:text-red-700 transition-colors hover:bg-red-100 rounded-lg"
               >
-                <XMarkIcon className="w-5 h-5" />
+                <XMarkIcon className="w-4 h-4" />
               </button>
             </div>
           </div>
           
-          <div ref={scrollRef} className="flex-1 overflow-auto p-4 space-y-4">
+          {/* Messages Area */}
+          <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/50 dark:bg-gray-900/30">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center p-4">
-                <ChatBubbleLeftRightIcon className="w-12 h-12 text-primary/30 mb-3" />
-                <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
-                  Welcome to our restaurant assistant!
+                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                  <SparklesIcon className="w-8 h-8 text-primary" />
+                </div>
+                <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
+                  How can I help you today?
+                </h4>
+                <p className="text-sm text-gray-600 dark:text-gray-300 mb-6 max-w-xs">
+                  Ask me about our menu, get personalized recommendations, or inquire about today's specials.
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Ask me about our menu, specials, or for recommendations.
-                </p>
+                
+                {/* Quick Prompts */}
+                <div className="space-y-2 w-full max-w-xs">
+                  {QUICK_PROMPTS.map((prompt, index) => (
+                    <button
+                      key={index}
+                      onClick={() => send(prompt)}
+                      className="w-full text-left p-3 rounded-xl bg-blue-500 border border-gray-200 hover:border-blue-400 hover:shadow-sm transition-all duration-200 text-sm text-white"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : (
               messages.map((m, idx) => (
-                <div key={idx} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div 
-                    className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                      m.role === 'user' 
-                        ? 'bg-primary text-white rounded-tr-none' 
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-tl-none'
-                    }`}
-                  >
-                    <p className="text-sm whitespace-pre-wrap">{m.content}</p>
-                    <p className="text-xs opacity-70 mt-1 text-right">
+                <div key={idx} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                  {/* Avatar */}
+                  <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                    m.role === 'user' 
+                      ? 'bg-primary text-white' 
+                      : 'bg-gradient-to-r from-blue-500 to-purple-500 text-white'
+                  }`}>
+                    {m.role === 'user' ? (
+                      <UserIcon className="w-4 h-4" />
+                    ) : (
+                      <SparklesIcon className="w-4 h-4" />
+                    )}
+                  </div>
+                  
+                  {/* Message Bubble */}
+                  <div className={`max-w-[80%] ${m.role === 'user' ? 'flex flex-col items-end' : ''}`}>
+                    <div 
+                      className={`rounded-2xl px-4 py-3 ${
+                        m.role === 'user' 
+                          ? 'bg-primary text-white rounded-br-none' 
+                          : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 rounded-bl-none shadow-sm'
+                      }`}
+                    >
+                      <p className="text-sm whitespace-pre-wrap leading-relaxed">{m.content}</p>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1 px-1">
                       {m.timestamp ? new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
                     </p>
                   </div>
@@ -303,66 +350,98 @@ export default function ChatWidget() {
               ))
             )}
             
+            {/* Loading Indicator */}
             {loading && (
-              <div className="flex justify-start">
-                <div className="bg-gray-100 dark:bg-gray-700 rounded-lg px-4 py-2 text-gray-800 dark:text-gray-200 rounded-tl-none max-w-[80%]">
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce"></div>
-                    <div className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                    <div className="w-2 h-2 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+              <div className="flex gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-gradient-to-r from-blue-500 to-purple-500 text-white">
+                  <SparklesIcon className="w-4 h-4" />
+                </div>
+                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl rounded-bl-none px-4 py-3 shadow-sm">
+                  <div className="flex space-x-1.5">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                   </div>
                 </div>
               </div>
             )}
             
+            {/* Recommendations */}
             {recommendations.length > 0 && !loading && (
-              <div className="mt-4 space-y-2">
-                <p className="text-xs text-gray-500 dark:text-gray-400">Recommended items:</p>
-                <div className="flex flex-col gap-2">
+              <div className="mt-6 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <SparklesIcon className="w-4 h-4 text-primary" />
+                  Recommended for you
+                </div>
+                <div className="grid gap-2">
                   {recommendations.map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between gap-2 bg-gray-50 dark:bg-gray-700/40 rounded-md px-2 py-1.5">
-                      <button
-                        onClick={() => askAboutItem(item)}
-                        className="text-xs text-left flex-1 hover:underline text-gray-800 dark:text-gray-200"
-                        title="Ask about this item"
-                      >
-                        {item.name} {typeof item.price === 'number' ? `( $${item.price} )` : ''}
-                      </button>
-                      <button
-                        onClick={() => addRecommendationToCart(item)}
-                        className="text-xs bg-primary text-white rounded-full px-3 py-1 hover:bg-primary/90"
-                        title="Add to cart"
-                      >
-                        Add
-                      </button>
+                    <div key={idx} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-3 hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between mb-1">
+                            <h4 className="font-medium text-gray-900 dark:text-white text-sm truncate">
+                              {item.name}
+                            </h4>
+                            <span className="text-sm font-semibold text-primary whitespace-nowrap ml-2">
+                              ${typeof item.price === 'number' ? item.price.toFixed(2) : '0.00'}
+                            </span>
+                          </div>
+                          {item.description && (
+                            <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 mb-2">
+                              {item.description}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => askAboutItem(item)}
+                              className="text-xs text-primary hover:text-primary/80 font-medium flex items-center gap-1 transition-colors"
+                            >
+                              <InformationCircleIcon className="w-3 h-3" />
+                              Learn more
+                            </button>
+                            <button
+                              onClick={() => addRecommendationToCart(item)}
+                              className="text-xs bg-primary text-white rounded-lg px-3 py-1.5 hover:bg-primary/90 font-medium flex items-center gap-1 transition-colors"
+                            >
+                              <ShoppingCartIcon className="w-3 h-3" />
+                              Add to cart
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
             )}
+            
+            <div ref={messagesEndRef} />
           </div>
           
-          <div className="p-3 border-t flex items-center gap-2">
-            <input
-              ref={inputRef}
-              className="input flex-1 h-10 rounded-full px-4 bg-gray-100 dark:bg-gray-700 border-none focus:ring-2 focus:ring-primary/50"
-              placeholder="Ask about our menu or specials..."
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') send() }}
-              disabled={loading}
-            />
-            <button 
-              disabled={loading || !input.trim()} 
-              className={`rounded-full h-10 w-10 flex items-center justify-center ${
-                input.trim() && !loading 
-                  ? 'bg-primary text-white' 
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-400'
-              }`} 
-              onClick={send}
-            >
-              <PaperAirplaneIcon className="w-5 h-5" />
-            </button>
+          {/* Input Area */}
+          <div className="border-t border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-800">
+            <div className="flex items-center gap-2">
+              <input
+                ref={inputRef}
+                className="flex-1 h-12 rounded-xl bg-gray-100 dark:bg-gray-700 border-0 focus:ring-2 focus:ring-primary/50 px-4 text-sm transition-all duration-200"
+                placeholder="Ask about our menu, specials, or recommendations..."
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) send() }}
+                disabled={loading}
+              />
+              <button 
+                disabled={loading || !input.trim()} 
+                className={`h-12 w-12 rounded-xl flex items-center justify-center transition-all duration-200 ${
+                  input.trim() && !loading 
+                    ? 'bg-primary text-white shadow-lg hover:shadow-xl transform hover:scale-105' 
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-400'
+                }`} 
+                onClick={() => send()}
+              >
+                <PaperAirplaneIcon className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import SignOutButton from "../auth/signoutbutton";
+
 
 export default function AdminNav() {
   const pathname = usePathname();
@@ -44,7 +44,7 @@ export default function AdminNav() {
       </nav>
       
       <div className="p-4 border-t">
-        <SignOutButton />
+
       </div>
     </div>
   );
