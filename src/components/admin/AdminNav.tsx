@@ -35,12 +35,6 @@ export default function AdminNav() {
         <Link href="/admin/orders" className={`block p-2 rounded ${isActive("/admin/orders")}`}>
           Orders
         </Link>
-        <Link href="/admin/analytics" className={`block p-2 rounded ${isActive("/admin/analytics")}`}>
-          Analytics
-        </Link>
-        <Link href="/admin/settings" className={`block p-2 rounded ${isActive("/admin/settings")}`}>
-          Settings
-        </Link>
       </nav>
       
       <div className="p-4 border-t">

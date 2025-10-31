@@ -1,62 +1,149 @@
+// app/api/orders/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
-// Update the path below if 'options' is not located at 'src/lib/auth/options.ts'
-// Update the path below to the correct location of 'options.ts'
-import authOptions from '@/lib/auth/options';
 import dbConnect from '@/lib/mongoose';
 import Order from '@/models/Order';
+import { requireAdmin } from '@/middleware/auth';
+import { createApiResponse, createApiError } from '@/lib/utils/api';
 
-export async function GET(req: NextRequest): Promise<NextResponse> {
+// GET single order
+export async function GET(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
   try {
-    // Get the authenticated user
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user) {
+    await dbConnect();
+    const { id } = await context.params;
+    const order = await Order.findById(id);
+    
+    if (!order) {
       return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
+        createApiError('Order not found'),
+        { status: 404 }
       );
     }
     
-    // Connect to the database
-  await dbConnect();
-    
-    // Get query parameters
-    const searchParams = req.nextUrl.searchParams;
-    const status = searchParams.get('status');
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '10');
-    
-    // Build query
-  const userId = session.user.id ?? session.user.email;
-    const query: Record<string, unknown> = { userId };
-    
-    if (status) {
-      query.status = status;
-    }
-    
-    // Fetch orders
-    const orders = await Order.find(query)
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit);
-    
-    // Count total orders for pagination
-    const totalOrders = await Order.countDocuments(query);
-    
-    return NextResponse.json({
-      success: true,
-      orders: orders,
-      pagination: {
-        total: totalOrders,
-        page,
-        limit,
-        pages: Math.ceil(totalOrders / limit)
-      }
-    });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('Error fetching customer orders:', message);
-    return NextResponse.json({ error: message || 'Failed to fetch orders' }, { status: 500 });
+    return NextResponse.json(createApiResponse({ order }));
+  } catch (error) {
+    console.error('[Order GET] Error:', error);
+    return NextResponse.json(
+      createApiError('Failed to fetch order'),
+      { status: 500 }
+    );
   }
+}
+
+// UPDATE order (PATCH for partial updates) - Admin only
+export async function PATCH(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const handler = requireAdmin()(async (authenticatedReq: NextRequest) => {
+    try {
+      await dbConnect();
+      const { id } = await context.params;
+      const body = await authenticatedReq.json();
+      
+      // Find and update the order
+      const order = await Order.findByIdAndUpdate(
+        id,
+        { ...body, updatedAt: new Date() },
+        { new: true, runValidators: true }
+      );
+      
+      if (!order) {
+        return NextResponse.json(
+          createApiError('Order not found'),
+          { status: 404 }
+        );
+      }
+      
+      return NextResponse.json(
+        createApiResponse({ order }, 'Order updated successfully')
+      );
+    } catch (error) {
+      console.error('[Order PATCH] Error:', error);
+      return NextResponse.json(
+        createApiError('Failed to update order'),
+        { status: 500 }
+      );
+    }
+  });
+
+  return handler(req);
+}
+
+// UPDATE order (PUT for full replacement) - Admin only
+export async function PUT(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const handler = requireAdmin()(async (authenticatedReq: NextRequest) => {
+    try {
+      await dbConnect();
+      const { id } = await context.params;
+      const body = await authenticatedReq.json();
+      
+      const order = await Order.findByIdAndUpdate(
+        id,
+        { ...body, updatedAt: new Date() },
+        { new: true, runValidators: true, overwrite: true }
+      );
+      
+      if (!order) {
+        return NextResponse.json(
+          createApiError('Order not found'),
+          { status: 404 }
+        );
+      }
+      
+      return NextResponse.json(
+        createApiResponse({ order }, 'Order updated successfully')
+      );
+    } catch (error) {
+      console.error('[Order PUT] Error:', error);
+      return NextResponse.json(
+        createApiError('Failed to update order'),
+        { status: 500 }
+      );
+    }
+  });
+
+  return handler(req);
+}
+
+// DELETE order - Admin only
+export async function DELETE(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  const handler = requireAdmin()(async (authenticatedReq: NextRequest) => {
+    try {
+      await dbConnect();
+      const { id } = await context.params;
+      
+      const order = await Order.findByIdAndDelete(id);
+      
+      if (!order) {
+        return NextResponse.json(
+          createApiError('Order not found'),
+          { status: 404 }
+        );
+      }
+      
+      return NextResponse.json(
+        createApiResponse(
+          { id },
+          'Order deleted successfully'
+        )
+      );
+    } catch (error) {
+      console.error('[Order DELETE] Error:', error);
+      return NextResponse.json(
+        createApiError('Failed to delete order'),
+        { status: 500 }
+      );
+    }
+  });
+
+  return handler(req);
 }

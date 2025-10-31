@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
-import { Clock, Package, Check, X, ChevronDown, ChevronUp, Phone, MapPin, AlertCircle } from 'lucide-react'
+import { Clock, Package, Check, X, ChevronDown, ChevronUp, Phone, MapPin, AlertCircle, Trash2 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 
 const ORDER_STATUSES = [
@@ -21,6 +21,7 @@ export default function AdminOrdersPage() {
 
   async function fetchOrders(status?: string) {
     setLoading(true)
+    setError(null)
     try {
       const url = status 
         ? `/api/orders?status=${status}` 
@@ -43,6 +44,7 @@ export default function AdminOrdersPage() {
     fetchOrders(activeFilter || undefined)
   }, [activeFilter])
 
+  // UPDATE order status
   async function updateOrderStatus(orderId: string, status: string) {
     try {
       const res = await fetch(`/api/orders/${orderId}`, {
@@ -55,10 +57,30 @@ export default function AdminOrdersPage() {
       
       if (!res.ok) throw new Error(data.error || 'Failed to update order')
       
-      // Update the order in the local state
       setOrders(orders.map(order => 
         order._id === orderId ? { ...order, status } : order
       ))
+    } catch (e: any) {
+      setError(e.message)
+    }
+  }
+
+  // DELETE order
+  async function deleteOrder(orderId: string) {
+    if (!confirm('Are you sure you want to delete this order? This action cannot be undone.')) {
+      return
+    }
+    
+    try {
+      const res = await fetch(`/api/orders/${orderId}`, {
+        method: 'DELETE'
+      })
+      
+      const data = await res.json()
+      
+      if (!res.ok) throw new Error(data.error || 'Failed to delete order')
+      
+      setOrders(orders.filter(order => order._id !== orderId))
     } catch (e: any) {
       setError(e.message)
     }
@@ -100,9 +122,9 @@ export default function AdminOrdersPage() {
     <div className="grid gap-6 pb-10">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Order Management</h1>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button 
-            className={`btn h-9 px-3 ${!activeFilter ? 'bg-blue-50 text-blue-700' : ''}`}
+            className={`btn h-9 px-3 text-sm ${!activeFilter ? 'bg-blue-50 text-blue-700' : ''}`}
             onClick={() => setActiveFilter(null)}
           >
             All
@@ -110,7 +132,7 @@ export default function AdminOrdersPage() {
           {ORDER_STATUSES.map(status => (
             <button 
               key={status.value}
-              className={`btn h-9 px-3 ${activeFilter === status.value ? status.color : ''}`}
+              className={`btn h-9 px-3 text-sm ${activeFilter === status.value ? status.color : ''}`}
               onClick={() => setActiveFilter(status.value)}
             >
               {status.label}
@@ -123,6 +145,9 @@ export default function AdminOrdersPage() {
         <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-md flex items-center gap-2">
           <AlertCircle size={18} />
           {error}
+          <button onClick={() => setError(null)} className="ml-auto">
+            <X size={16} />
+          </button>
         </div>
       )}
 
@@ -252,14 +277,30 @@ export default function AdminOrdersPage() {
                           {ORDER_STATUSES.map(status => (
                             <button
                               key={status.value}
-                              className={`btn h-9 px-3 ${order.status === status.value ? status.color : ''}`}
-                              onClick={() => updateOrderStatus(order._id, status.value)}
+                              className={`btn h-9 px-3 text-sm ${order.status === status.value ? status.color : ''}`}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                updateOrderStatus(order._id, status.value)
+                              }}
                               disabled={order.status === status.value}
                             >
                               {status.label}
                             </button>
                           ))}
                         </div>
+                      </div>
+                      
+                      <div className="mt-6 pt-4 border-t">
+                        <button
+                          className="btn text-red-600 hover:bg-red-50 flex items-center gap-2 w-full justify-center"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            deleteOrder(order._id)
+                          }}
+                        >
+                          <Trash2 size={16} />
+                          Delete Order
+                        </button>
                       </div>
                     </div>
                   </div>

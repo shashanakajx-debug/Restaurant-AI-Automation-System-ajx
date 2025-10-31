@@ -10,9 +10,10 @@ export interface CheckoutItem {
 export interface CheckoutRequest {
   items: CheckoutItem[];
   metadata?: Record<string, unknown>;
+  paymentMethod?: string; // ✅ added: allows 'card', 'cash', 'cod', 'counter'
 }
 
 export interface CheckoutResponse {
-  sessionId: string;
-  url?: string | null;
+  sessionId: string | null;
+  url: string | null;
 }

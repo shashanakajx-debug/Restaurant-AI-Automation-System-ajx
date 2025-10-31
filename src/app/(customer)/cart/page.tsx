@@ -9,6 +9,9 @@ export default function CartPage() {
   const { items, updateQuantity, removeItem, clear, subtotal } = useCart()
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // paymentMethod: 'card' | 'cash'
+  const [paymentMethod, setPaymentMethod] = useState<'card' | 'cash'>('card')
   
   const handleCheckout = async () => {
     if (items.length === 0) {
@@ -26,6 +29,7 @@ export default function CartPage() {
         },
         body: JSON.stringify({ 
           items,
+          paymentMethod, // <-- added
           metadata: {
             orderType: 'delivery'
           }
@@ -33,19 +37,27 @@ export default function CartPage() {
       })
       
       if (!response.ok) {
-        throw new Error(`Error ${response.status}: ${response.statusText}`)
+        // try to get message from body
+        let text = await response.text().catch(() => '')
+        try {
+          const json = JSON.parse(text || '{}')
+          throw new Error(json?.error ?? `Error ${response.status}: ${response.statusText}`)
+        } catch {
+          throw new Error(`Error ${response.status}: ${response.statusText}`)
+        }
       }
       
       const data = await response.json()
       
       if (data.url) {
+        // For card: Stripe Checkout URL; for cash: success page URL with order id
         window.location.href = data.url
       } else {
         throw new Error('No checkout URL returned')
       }
-    } catch (error) {
-      console.error('Checkout error:', error)
-      setError('There was a problem processing your checkout. Please try again.')
+    } catch (err: any) {
+      console.error('Checkout error:', err)
+      setError(err?.message || 'There was a problem processing your checkout. Please try again.')
     } finally {
       setCheckoutLoading(false)
     }
@@ -160,6 +172,33 @@ export default function CartPage() {
               <span>${(subtotal() * 1.08 + 3.99).toFixed(2)}</span>
             </div>
           </div>
+
+          {/* Payment method selector */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-2">Payment method</label>
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="paymentMethod"
+                  value="card"
+                  checked={paymentMethod === 'card'}
+                  onChange={() => setPaymentMethod('card')}
+                />
+                <span className="text-sm">Pay online (card)</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="paymentMethod"
+                  value="cash"
+                  checked={paymentMethod === 'cash'}
+                  onChange={() => setPaymentMethod('cash')}
+                />
+                <span className="text-sm">Pay at counter / Cash on delivery</span>
+              </label>
+            </div>
+          </div>
           
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-md mb-4 flex items-center gap-2 text-sm">
@@ -176,12 +215,12 @@ export default function CartPage() {
             {checkoutLoading ? (
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
             ) : (
-              'Proceed to Checkout'
+              paymentMethod === 'card' ? 'Proceed to Payment' : 'Place Order (Pay at counter)'
             )}
           </button>
           
           <div className="mt-4 text-xs text-gray-500 text-center">
-            Secure checkout powered by Stripe
+            Secure checkout powered by Stripe (for online payments)
           </div>
           <div className="mt-4 text-sm text-center">
             <Link href="/my-orders" className="text-primary hover:underline">

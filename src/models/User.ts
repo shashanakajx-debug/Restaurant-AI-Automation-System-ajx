@@ -1,4 +1,3 @@
-// src/models/User.ts
 import mongoose, { Schema, Document, Model } from 'mongoose'
 import bcrypt from 'bcryptjs'
 import { UserRole } from '@/types/user'
@@ -33,6 +32,10 @@ export interface IUser extends Document {
 
   resetToken?: string
   resetTokenExpiry?: number
+
+  /** ✅ Add these two lines */
+  createdAt?: Date
+  updatedAt?: Date
 
   comparePassword(candidate: string): Promise<boolean>
 }
@@ -79,7 +82,7 @@ const UserSchema = new Schema<IUser>(
     emailVerified: { type: Boolean, default: false },
   },
   {
-    timestamps: true,
+    timestamps: true, // ✅ Adds createdAt & updatedAt
     toJSON: {
       transform(doc, ret) {
         const { password, __v, ...clean } = ret as any
@@ -111,4 +114,5 @@ UserSchema.methods.comparePassword = async function (
 
 const User: Model<IUser> =
   mongoose.models.User || mongoose.model<IUser>('User', UserSchema)
+
 export default User
